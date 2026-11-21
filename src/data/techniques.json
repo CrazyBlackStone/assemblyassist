@@ -1,0 +1,131 @@
+{
+  "_readme": "Curated rework techniques. Fix help may ONLY choose and adapt these entries; it may not invent advice. Hardware team: edit freely, keep ids stable, and set reviewed to true once an entry has been checked. Issue types: flipped, missing, bridged, lifted_lead, insufficient_solder, excess_solder, cold_joint, tombstoned, misaligned, wrong_part, other.",
+  "entries": [
+    {
+      "id": "flux-first",
+      "title": "Add flux before any rework",
+      "issues": ["bridged", "insufficient_solder", "excess_solder", "cold_joint", "lifted_lead", "tombstoned", "misaligned", "other"],
+      "steps": [
+        "Apply a small amount of flux (pen or gel) directly on the joint you are fixing.",
+        "Clean the iron tip on the sponge or brass wool and add a tiny bit of fresh solder to it.",
+        "Touch the joint for 2–3 seconds, then lift straight off."
+      ],
+      "check": "The joint should look smooth and shiny, with solder flowing onto both the pad and the lead.",
+      "reviewed": false
+    },
+    {
+      "id": "braid-bridge",
+      "title": "Remove a solder bridge with braid",
+      "issues": ["bridged", "excess_solder"],
+      "steps": [
+        "Add flux to the bridge.",
+        "Lay clean solder braid (desoldering wick) across the bridge.",
+        "Press the iron on top of the braid for 2–3 seconds until the solder wicks in.",
+        "Lift the braid and the iron away together, so the braid does not stick to the pads.",
+        "Cut off the used end of the braid before the next try."
+      ],
+      "check": "Look along the gap between the pins under magnification: you should see board between them. Then use the multimeter in continuity mode between the two pins; it should not beep, unless the schematic connects them.",
+      "reviewed": false
+    },
+    {
+      "id": "drag-bridge",
+      "title": "Clear a fine-pitch bridge by dragging the iron",
+      "issues": ["bridged"],
+      "steps": [
+        "Add plenty of flux along the row of pins.",
+        "With a clean, lightly tinned tip, drag slowly along the pins, away from the chip body.",
+        "If the bridge stays, use solder braid instead."
+      ],
+      "check": "Each pin should have its own fillet with a visible gap to the next pin. Confirm with a continuity test between neighbouring pins.",
+      "reviewed": false
+    },
+    {
+      "id": "reflow-joint",
+      "title": "Reflow a dull, cracked or thin joint",
+      "issues": ["cold_joint", "insufficient_solder"],
+      "steps": [
+        "Add flux to the joint.",
+        "Heat the pad and the lead together, not just the solder.",
+        "Feed a little solder into the point where pad and lead meet, then remove the solder, then the iron."
+      ],
+      "check": "The fillet should be concave and shiny, and should cover the pad up the side of the lead.",
+      "reviewed": false
+    },
+    {
+      "id": "lifted-lead",
+      "title": "Re-seat a lifted leg",
+      "issues": ["lifted_lead"],
+      "steps": [
+        "Add flux to the lifted leg and its pad.",
+        "Hold the leg down gently with the tweezer tip.",
+        "Heat the pad and leg together and add a little solder; keep holding until the solder sets."
+      ],
+      "check": "The leg should sit flat on the pad with solder visible along its foot. Nudge the part gently with the tweezers; nothing should move.",
+      "reviewed": false
+    },
+    {
+      "id": "remove-two-terminal",
+      "title": "Remove a two-terminal part (to flip or replace it)",
+      "issues": ["flipped", "wrong_part", "tombstoned"],
+      "steps": [
+        "Add flux and fresh solder to both ends of the part.",
+        "Heat the ends quickly in turn (or use two irons or tweezer irons) until both are molten at once.",
+        "Slide the part off with the tweezers; do not pull up on a pad.",
+        "Clean the pads with braid, then place the part again the right way round."
+      ],
+      "check": "Before re-soldering, check the pads are flat and intact. After, re-check orientation against the board's marking.",
+      "reviewed": false
+    },
+    {
+      "id": "remove-flipped-chip",
+      "title": "Remove a chip placed the wrong way",
+      "issues": ["flipped", "wrong_part"],
+      "steps": [
+        "Stop and confirm the orientation problem against the board's pin-1 mark before removing anything.",
+        "Add flux to every pin. Use a hot-air station if available; otherwise flood each row with solder so it stays molten while you heat it.",
+        "When all pins are molten, lift the chip straight up with tweezers. Do not lever it.",
+        "Clean every pad with braid and flux before placing the chip again."
+      ],
+      "check": "All pads flat and separate, no lifted pads. Re-place with pin 1 matching the board mark, then inspect every pin for bridges.",
+      "caution": "Pads lift easily when overheated. If you are unsure, ask a TA before removing a chip.",
+      "reviewed": false
+    },
+    {
+      "id": "fix-tombstone",
+      "title": "Fix a tombstoned part",
+      "issues": ["tombstoned"],
+      "steps": [
+        "Add flux to the raised end and its pad.",
+        "Heat the soldered end, and while it is molten push the part down flat with the tweezers.",
+        "Solder the raised end to its pad, then reflow the first end briefly."
+      ],
+      "check": "Both ends should sit flat on their pads with similar fillets.",
+      "reviewed": false
+    },
+    {
+      "id": "realign-part",
+      "title": "Re-align a part that is off its pads",
+      "issues": ["misaligned"],
+      "steps": [
+        "Add flux to the joints.",
+        "Reheat one end or one row while gently nudging the part into position with the tweezers.",
+        "Repeat on the other side, then reflow every joint once."
+      ],
+      "check": "Each lead or end sits on the middle of its pad with no lead touching a neighbouring pad.",
+      "reviewed": false
+    },
+    {
+      "id": "place-missing",
+      "title": "Place a missing part",
+      "issues": ["missing"],
+      "steps": [
+        "Clean the pads with braid if old solder is left on them.",
+        "Tin one pad with a small amount of solder.",
+        "Hold the part with tweezers, reheat the tinned pad and slide the part in. Remove the iron, then let go.",
+        "Solder the other end, then reflow the first end."
+      ],
+      "check": "Part centred on the pads, orientation correct, both joints shiny.",
+      "reviewed": false
+    }
+  ]
+}

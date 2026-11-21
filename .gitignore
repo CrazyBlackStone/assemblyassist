@@ -1,0 +1,8 @@
+node_modules/
+dist/
+.DS_Store
+*.local
+.env*
+# Test-set photos are supplied by the hardware team; keep them out of git unless cleared to publish.
+test-set/photos/
+test-set/results/
