@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Runs the solder-check vision call on every photo in test-set/manifest.json and records accuracy.
-// Uses the SAME prompt and validation as the app (src/lib/ai/tasks/visionCheck.js).
+// Uses the same prompt and validation as the app (src/lib/ai/tasks/visionCheck.js).
 //
 //   OPENROUTER_API_KEY=sk-or-... npm run eval:vision
 //   npm run eval:vision -- --dry-run                   # no key: simulated answers (tests the script)

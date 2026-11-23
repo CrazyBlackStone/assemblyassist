@@ -101,11 +101,11 @@ function BoardSection({ navigate }) {
       <h3>Or upload your own</h3>
       <div className="upload-grid">
         <label>
-          BOM (CSV) — needs reference, value, footprint; optional qty, spares, DNP, polarized
+          BOM (CSV): needs reference, value and footprint columns; qty, spares, DNP and polarized are optional
           <input type="file" accept=".csv,.tsv,.txt,text/csv" onChange={(e) => { setBomFile(e.target.files[0] ?? null); setError(null); setLoaded(null) }} />
         </label>
         <label>
-          Pick-and-place (optional) — KiCad .pos/.csv, Altium, JLCPCB
+          Pick-and-place (optional): KiCad .pos/.csv, Altium or JLCPCB
           <input type="file" accept=".csv,.pos,.txt,.tsv,text/csv" onChange={(e) => { setPnpFile(e.target.files[0] ?? null); setError(null); setLoaded(null) }} />
         </label>
         <label>
@@ -259,7 +259,7 @@ function CameraSection() {
             <input value={p.peerPath} onChange={(e) => prefs.set((s) => ({ ...s, peerPath: e.target.value }))} />
           </label>
           <label className="wide">
-            ICE servers (JSON) — add TURN here, e.g. {'[{"urls":"turn:your-ec2-host:3478","username":"u","credential":"p"}]'}
+            ICE servers (JSON). Add TURN here, e.g. {'[{"urls":"turn:your-ec2-host:3478","username":"u","credential":"p"}]'}
             <textarea rows={3} value={p.iceServers} onChange={(e) => prefs.set((s) => ({ ...s, iceServers: e.target.value }))} />
           </label>
           <button className="btn small" onClick={() => prefs.set((s) => ({ ...s, iceServers: initialPrefs.iceServers, peerHost: '', peerPort: 443, peerPath: '/' }))}>
@@ -301,7 +301,7 @@ function AiSection() {
       <h2>3. AI models</h2>
       <p>
         Active: <strong className={provider === 'simulated' ? 'sim-text' : ''}>{PROVIDERS[provider].label}</strong>
-        {provider === 'simulated' && ' — add an OpenRouter key to use real models. Everything else works without one.'}
+        {provider === 'simulated' && '. Add an OpenRouter key to use real models. Everything else works without one.'}
       </p>
       <div className="form-grid">
         <label>

@@ -25,9 +25,9 @@
 - **Plain JavaScript + Vite + React**, no router library (hash routing for GitHub Pages).
 - **AI never decides facts about parts.** Polarity, package sizes, locations, values, spares and tray numbers come from the loaded files and fixed rules. Model outputs that name parts are checked against the board; unknown parts are removed and logged.
 - **The vision check uses a full-resolution still, not the video stream.** The laptop asks the phone for a photo (ImageCapture where available) and crops it. If that fails it falls back to a video frame and says so.
-- **Local quality check before spending a call:** brightness and blur are measured on the crop and warned about (not blocked).
-- **Simulated provider** so the whole app can be demoed and tested without a key. Its output is visibly labeled "Simulated AI — no model was called" and costs $0.
-- **Voice commands are a fixed grammar**, not a model call: faster, free, and its answers trace to board data. The course's model-call requirement is met by plan (language), check (image) and fix help (language).
+- **Local quality check before spending a call:** the app measures brightness and blur on the crop and warns; the user can still send it.
+- **Simulated provider** so the whole app can be demoed and tested without a key. Its results are labeled "Simulated AI", say "no model was called" and cost $0.
+- **Voice commands are matched against a fixed grammar.** Matching is faster than a model call and costs nothing, and every answer traces to board data. The course's model-call requirement is met by plan (language), check (image) and fix help (language).
 - **"Next" by voice means "placed, go to next".** "Back" is undo. Polarized parts refuse "next" until the orientation is confirmed.
 
 ## Backend (AWS EC2): not needed yet

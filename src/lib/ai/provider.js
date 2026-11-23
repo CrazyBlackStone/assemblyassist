@@ -5,7 +5,7 @@ import { findModel } from './catalog.js'
 import { extractJson } from './json.js'
 
 // ============================================================================
-// The ONE place the app talks to models. Every call:
+// The one place the app talks to models. Every call:
 //   - has a timeout and can be cancelled
 //   - is recorded in the cost meter (cost "unknown" when there is no price data)
 //   - logs timeouts, errors and unreadable output to the failure log

@@ -9,8 +9,6 @@ How these were made:
 - **Voice:** a scripted speech recognizer stands in for the microphone. The transcript panel shows exactly what it "heard".
 - **Pairing:** shots 18–20 show a real pairing between two browser windows through the PeerJS server.
 
-Retake them after UI changes: the script and fake camera are described at the end.
-
 ---
 
 ## Setup

@@ -2,7 +2,7 @@ import { describeFootprint, shortFootprint } from '../../bom/footprint.js'
 import { MARKINGS } from '../../bom/polarity.js'
 import { pickEnum } from '../json.js'
 
-// Task 2 (image understanding): judge ONE cropped photo of ONE part right after soldering.
+// Task 2 (image understanding): judge one cropped photo of one part right after soldering.
 // The model gets the expected part from the user's BOM; it is told not to assert part facts.
 // It can never return "all clear": the best verdict is "looks_right", and the UI still
 // requires the user to confirm with their own eyes.

@@ -1,5 +1,5 @@
 // ============================================================================
-// THE swap point for models. When the course announces the allowed models and
+// The swap point for models. When the course announces the allowed models and
 // budget, edit DEFAULT_TASKS (or pick models on the Setup screen; choices there
 // override these defaults and are stored in the browser).
 // ============================================================================

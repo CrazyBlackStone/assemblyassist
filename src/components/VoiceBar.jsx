@@ -79,7 +79,7 @@ export function VoiceBar() {
       <div className="voice-transcript">
         <div>
           <span className="label">Heard{fromPhone ? ' (phone)' : ''}:</span>{' '}
-          {v.interim ? <em>{v.interim}…</em> : v.heard === '(button)' ? <span className="muted">— (you tapped a button)</span> : v.heard ? <strong>“{v.heard}”</strong> : <span className="muted">nothing yet</span>}
+          {v.interim ? <em>{v.interim}…</em> : v.heard === '(button)' ? <span className="muted">(you tapped a button)</span> : v.heard ? <strong>“{v.heard}”</strong> : <span className="muted">nothing yet</span>}
           {v.command && v.heard !== '(button)' && <span className={`cmd ${v.command.type === 'unknown' ? 'bad' : ''}`}>→ {v.command.type}{v.command.ref ? ` ${v.command.ref}` : ''}</span>}
           {v.alternatives?.length > 1 && <span className="muted small"> (also heard: {v.alternatives.slice(1).join(' / ')})</span>}
         </div>
