@@ -66,7 +66,7 @@ It writes `test-set/results/<time>.csv/.json` and prints verdict accuracy, misse
 
 ## Pairing and the optional EC2 relay
 
-Pairing uses PeerJS (WebRTC). By default it uses the free PeerJS cloud server and Google's public STUN server. If campus Wi-Fi blocks the direct phone–laptop connection, the app says so. The fix is a TURN relay (for example coturn on EC2), entered under **Setup → Camera → connection settings → ICE servers**; no code change or rebuild needed. A self-hosted PeerServer can be entered in the same place.
+Pairing uses PeerJS (WebRTC). By default it uses the free PeerJS cloud server and Google's public STUN server. If campus Wi-Fi blocks the direct phone–laptop connection, the app says so. The fix is a TURN relay (for example coturn on EC2), entered under **Setup → Camera → connection settings → ICE servers**; no code change or rebuild needed. A self-hosted PeerServer can be entered in the same place. Until then, the quickest workaround is the phone's own hotspot: see [docs/phone-hotspot.md](docs/phone-hotspot.md).
 
 ## Privacy
 

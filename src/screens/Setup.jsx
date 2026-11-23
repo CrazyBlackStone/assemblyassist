@@ -181,6 +181,20 @@ function CameraSection() {
               {pair.phoneInfo?.width && ` · phone camera ${pair.phoneInfo.width}px wide`}
             </p>
             {pair.error && <p className="error-text">{pair.error}</p>}
+            <details className="hotspot-tip">
+              <summary>Won’t connect on campus Wi-Fi? Use the phone’s hotspot</summary>
+              <ol>
+                <li>Plug the phone in, then turn on its hotspot (iPhone: Personal Hotspot → Allow Others to Join; Android: Hotspot &amp; tethering → Wi-Fi hotspot).</li>
+                <li>Connect this laptop to the phone’s hotspot and turn off any VPN. On Windows, set the network to Private.</li>
+                <li>Reload this page, then scan the new QR code with the phone.</li>
+              </ol>
+              <p className="muted small">
+                Video stays on the hotspot; only page loads, pairing and AI calls use mobile data.{' '}
+                <a href="https://github.com/CrazyBlackStone/assemblyassist/blob/main/docs/phone-hotspot.md" target="_blank" rel="noreferrer">
+                  Full guide and troubleshooting
+                </a>
+              </p>
+            </details>
             <button className="btn small" onClick={() => { resetHost({ newCode: true }); startHost() }}>
               New code
             </button>
