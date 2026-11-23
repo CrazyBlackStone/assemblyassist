@@ -1,21 +1,21 @@
-import { parseDelimited, findColumn, parseNumber, parseYesNo } from './csv.js'
+import { parseDelimited, findColumn, parseNumber, parseYesNo, looksBinary } from './csv.js'
 import { expandRefs, compareRefs } from './refs.js'
 import { describeFootprint, shortFootprint } from './footprint.js'
 import { detectPolarity } from './polarity.js'
 
 // Column aliases for common CAD exports (KiCad, Altium, EasyEDA, Eagle, JLCPCB).
 const BOM_COLS = {
-  ref: ['Reference', 'References', 'Designator', 'Designators', 'RefDes', 'Ref', 'Part', 'Parts'],
+  ref: ['Reference', 'References', 'Refs', 'Ref', 'Designator', 'Designators', 'RefDes', 'Ref Des', 'Part', 'Parts', 'Reference Designator', 'Reference Designators'],
   value: ['Value', 'Val', 'Comment', 'Description'],
   footprint: ['Footprint', 'Package', 'Footprint Name', 'Case', 'JLCPCB Footprint'],
-  qty: ['Qty', 'Quantity', 'Count', 'Qnty'],
+  qty: ['Qty', 'Quantity', 'Count', 'Qnty', 'Quantity Per PCB'],
   spares: ['Spares', 'Spare', 'Extra', 'Extras', 'Overage'],
   dnp: ['DNP', 'DNF', 'Do Not Place', 'Exclude', 'Not Fitted'],
   polarized: ['Polarized', 'Polarised', 'Polarity'],
 }
 
 const PNP_COLS = {
-  ref: ['Ref', 'Reference', 'Designator', 'RefDes', 'Part'],
+  ref: ['Ref', 'Reference', 'Refs', 'Designator', 'RefDes', 'Part'],
   x: ['PosX', 'Pos X', 'Mid X', 'Center-X(mm)', 'Center X', 'X', 'Ref X', 'LocationX'],
   y: ['PosY', 'Pos Y', 'Mid Y', 'Center-Y(mm)', 'Center Y', 'Y', 'Ref Y', 'LocationY'],
   rot: ['Rot', 'Rotation', 'Angle', 'Orientation'],
@@ -26,7 +26,7 @@ export class BoardFileError extends Error {}
 
 /** Parse a BOM CSV into rows: { refs, value, footprint, qty, spares, dnp, polarized }. */
 export function parseBom(text) {
-  const { headers, rows } = parseDelimited(text)
+  const { headers, rows, skippedLines } = parseDelimited(text, { headerAliases: BOM_COLS.ref })
   const col = Object.fromEntries(Object.entries(BOM_COLS).map(([k, a]) => [k, findColumn(headers, a)]))
   if (!col.ref) {
     throw new BoardFileError(
@@ -34,6 +34,7 @@ export function parseBom(text) {
     )
   }
   const warnings = []
+  if (skippedLines) warnings.push(`Skipped ${skippedLines} title line(s) above the column headers.`)
   if (!col.value) warnings.push('No value column found; values will show as "—".')
   if (!col.footprint) warnings.push('No footprint column found; package sizes will be missing.')
 
@@ -78,7 +79,7 @@ function kicadAsciiToCsv(text) {
 /** Parse a pick-and-place file into { locations: {ref: {x,y,rot,side}}, warnings }. */
 export function parsePnp(text) {
   const csv = kicadAsciiToCsv(String(text)) ?? text
-  const { headers, rows } = parseDelimited(csv)
+  const { headers, rows } = parseDelimited(csv, { headerAliases: PNP_COLS.ref })
   const col = Object.fromEntries(Object.entries(PNP_COLS).map(([k, a]) => [k, findColumn(headers, a)]))
   if (!col.ref || !col.x || !col.y) {
     throw new BoardFileError(
@@ -181,7 +182,21 @@ export function defaultSequence(board) {
 }
 
 export function loadBoardFromText({ name, source = 'upload', bomText, pnpText }) {
-  const bom = parseBom(bomText)
-  const pnp = pnpText ? parsePnp(pnpText) : null
+  for (const [label, t] of [['BOM', bomText], ['pick-and-place', pnpText]]) {
+    const kind = t ? looksBinary(t) : null
+    if (kind) throw new BoardFileError(`The ${label} file looks like ${kind}. Export or "Save as" CSV (comma-separated) and load that instead.`)
+  }
+  let bom
+  try {
+    bom = parseBom(bomText)
+  } catch (e) {
+    throw new BoardFileError(`BOM file: ${e.message}`)
+  }
+  let pnp = null
+  try {
+    pnp = pnpText ? parsePnp(pnpText) : null
+  } catch (e) {
+    throw new BoardFileError(`Pick-and-place file: ${e.message}`)
+  }
   return buildBoard({ name, source, bom, pnp })
 }

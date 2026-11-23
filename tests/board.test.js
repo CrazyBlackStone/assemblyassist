@@ -77,3 +77,36 @@ describe('board loading', () => {
     expect(b.warnings.join(' ')).toMatch(/R9/)
   })
 })
+
+describe('real-world BOM exports', () => {
+  it('reads KiCad 8 "Refs" exports', () => {
+    const b = loadBoardFromText({ bomText: '"Refs","Value","Footprint","${QUANTITY}","${DNP}"\n"C1,C2","10uF","Capacitor_SMD:C_0805_2012Metric","2",""\n"R1","1k","Resistor_SMD:R_0603_1608Metric","1","DNP"\n' })
+    expect(Object.keys(b.parts)).toEqual(['C1', 'C2'])
+    expect(b.excluded).toEqual(['R1'])
+  })
+  it('skips title lines above the header (KiCad legacy BOM script)', () => {
+    const text = [
+      'Source:,/home/me/board.kicad_sch',
+      'Date:,Mon 01 Jan 2026',
+      'Tool:,Eeschema 8.0',
+      'Generator:,bom_csv_grouped_by_value',
+      'Component Count:,3',
+      '',
+      'Collated Components:',
+      '',
+      'Item,Qty,Reference(s),Value,LibPart,Footprint,Datasheet',
+      '1,2,"C1, C2",100nF,Device:C,Capacitor_SMD:C_0805_2012Metric,~',
+      '2,1,"U1",LM358,Amplifier:LM358,Package_SO:SOIC-8_3.9x4.9mm_P1.27mm,~',
+    ].join('\n')
+    const b = loadBoardFromText({ bomText: text })
+    expect(Object.keys(b.parts).sort()).toEqual(['C1', 'C2', 'U1'])
+    expect(b.warnings.join(' ')).toMatch(/Skipped \d+ title line/)
+  })
+  it('explains Excel files instead of failing silently', () => {
+    expect(() => loadBoardFromText({ bomText: 'PK\u0003\u0004 binary xlsx' })).toThrow(/Excel/)
+  })
+  it('says which file failed', () => {
+    expect(() => loadBoardFromText({ bomText: 'Value\n10k' })).toThrow(/^BOM file:/)
+    expect(() => loadBoardFromText({ bomText: 'Ref,Value\nR1,1k', pnpText: 'Ref,Rot\nR1,90' })).toThrow(/^Pick-and-place file:/)
+  })
+})

@@ -39,6 +39,8 @@ function BoardSection({ navigate }) {
   const [name, setName] = useState('')
   const [error, setError] = useState(null)
   const [warnings, setWarnings] = useState([])
+  const [loaded, setLoaded] = useState(null) // summary of the last uploaded board
+  const [busy, setBusy] = useState(false)
 
   const hasProgress = s.board && progress(s).placed + progress(s).skipped > 0
   const confirmReplace = () => !hasProgress || window.confirm(`Replace “${s.board.name}”? Its progress (${progress(s).placed} placed) will be cleared.`)
@@ -49,6 +51,9 @@ function BoardSection({ navigate }) {
     setError(null)
   }
 
+  const summary = (b) =>
+    `${Object.keys(b.parts).length} parts in ${b.groups.length} value groups, ${b.hasLocations ? 'with locations' : 'no locations'}${b.excluded.length ? `, ${b.excluded.length} DNP excluded` : ''}`
+
   const loadDemo = () => {
     if (!confirmReplace()) return
     load(loadBoardFromText({ ...demoBoardText, source: 'demo' }))
@@ -56,15 +61,21 @@ function BoardSection({ navigate }) {
   }
 
   const loadFiles = async () => {
-    if (!bomFile) return setError('Choose a BOM file first.')
+    setLoaded(null)
+    setWarnings([])
+    if (!bomFile) return setError('Choose a BOM file first (the first file box).')
     if (!confirmReplace()) return
+    setBusy(true)
     try {
       const bomText = await bomFile.text()
       const pnpText = pnpFile ? await pnpFile.text() : null
       const board = loadBoardFromText({ name: name || bomFile.name.replace(/\.[^.]+$/, ''), bomText, pnpText })
       load(board)
+      setLoaded({ name: board.name, text: summary(board) })
     } catch (e) {
       setError(e instanceof BoardFileError ? e.message : `Could not read the files: ${e.message}`)
+    } finally {
+      setBusy(false)
     }
   }
 
@@ -91,21 +102,35 @@ function BoardSection({ navigate }) {
       <div className="upload-grid">
         <label>
           BOM (CSV) — needs reference, value, footprint; optional qty, spares, DNP, polarized
-          <input type="file" accept=".csv,.tsv,.txt" onChange={(e) => setBomFile(e.target.files[0] ?? null)} />
+          <input type="file" accept=".csv,.tsv,.txt,text/csv" onChange={(e) => { setBomFile(e.target.files[0] ?? null); setError(null); setLoaded(null) }} />
         </label>
         <label>
           Pick-and-place (optional) — KiCad .pos/.csv, Altium, JLCPCB
-          <input type="file" accept=".csv,.pos,.txt,.tsv" onChange={(e) => setPnpFile(e.target.files[0] ?? null)} />
+          <input type="file" accept=".csv,.pos,.txt,.tsv,text/csv" onChange={(e) => { setPnpFile(e.target.files[0] ?? null); setError(null); setLoaded(null) }} />
         </label>
         <label>
           Board name
           <input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Lab 4 sensor board" />
         </label>
       </div>
-      <button className="btn" onClick={loadFiles}>
-        Load files
+      <button className="btn primary" onClick={loadFiles} disabled={busy}>
+        {busy ? 'Loading…' : 'Load files'}
       </button>
-      {error && <p className="error-text">{error}</p>}
+      {error && (
+        <div className="load-error" role="alert">
+          <strong>Could not load the board.</strong> {error}
+        </div>
+      )}
+      {loaded && (
+        <div className="load-ok" role="status">
+          <span>
+            ✓ Loaded <strong>{loaded.name}</strong>: {loaded.text}.
+          </span>
+          <button className="btn good" onClick={() => navigate('/build')}>
+            Start building →
+          </button>
+        </div>
+      )}
       {warnings.length > 0 && (
         <details className="warnings" open>
           <summary>{warnings.length} note(s) about the files</summary>
