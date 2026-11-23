@@ -59,7 +59,15 @@ export function sessionReducer(s, action) {
       const current = s.current && seq.includes(s.current) && isPending(s.status, s.current)
         ? s.current
         : seq.find((r) => isPending(s.status, r)) ?? null
-      return { ...s, plan: action.plan, current }
+      // Keep recorded multimeter checks for blocks that contain exactly the same parts.
+      const key = (b) => [...b.refs].sort().join(',')
+      const oldByParts = new Map((s.plan?.blocks ?? []).map((b) => [key(b), s.blockChecks[b.id]]))
+      const blockChecks = {}
+      for (const b of action.plan.blocks) {
+        const kept = oldByParts.get(key(b))
+        if (kept) blockChecks[b.id] = kept
+      }
+      return { ...s, plan: action.plan, current, blockChecks }
     }
     case 'move-block': {
       const blocks = [...s.plan.blocks]

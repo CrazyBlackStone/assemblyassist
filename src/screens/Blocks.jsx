@@ -46,7 +46,7 @@ function PlanSection({ s }) {
       <h2>Build order</h2>
       <p>
         Current: <strong>{sourceLabel}</strong>
-        {s.plan.model && <span className="muted"> ({s.plan.model})</span>}
+        {s.plan.model && s.plan.source === 'ai' && <span className="muted"> ({s.plan.model})</span>}
         {s.plan.reordered && <span className="muted"> · reordered by you</span>}
       </p>
       <p className="muted">Test one block at a time. Hard-to-reach parts go before the parts that would block them.</p>

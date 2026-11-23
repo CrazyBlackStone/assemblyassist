@@ -45,6 +45,17 @@ describe('session', () => {
     s = sessionReducer(s, { type: 'block-check', blockId: s.plan.blocks[0].id, done: true })
     expect(blocksAwaitingCheck(s)).toEqual([])
   })
+  it('keeps multimeter checks when switching to a plan with the same blocks', () => {
+    let s = run([{ type: 'load-board', board }])
+    const first = s.plan.blocks[0]
+    s = sessionReducer(s, { type: 'block-check', blockId: first.id, done: true })
+    const { plan } = validatePlan(board, s.plan.blocks.map((b) => ({ name: b.name, refs: b.refs })), 'ai')
+    s = sessionReducer(s, { type: 'set-plan', plan })
+    const same = s.plan.blocks.find((b) => b.refs.join() === first.refs.join())
+    expect(same.id).not.toBe(first.id)
+    expect(s.blockChecks[same.id]?.multimeter).toBe(true)
+    expect(Object.keys(s.blockChecks)).toHaveLength(1)
+  })
   it('assigns tray compartments in build order', () => {
     const s = run([{ type: 'load-board', board }, { type: 'auto-tray' }])
     expect(groupInfo(s, planSequence(s.plan)[0]).compartment).toBe(1)
