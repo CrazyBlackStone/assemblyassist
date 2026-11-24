@@ -31,6 +31,11 @@ export default function App() {
     refreshCatalog()
   }, [isPhone])
 
+  // Each page opens at the top, not at the previous page's scroll position.
+  useEffect(() => {
+    window.scrollTo(0, 0)
+  }, [route.path])
+
   useEffect(() => {
     if (projectId) openProject(projectId).then((x) => !x && navigate('/'))
     else project.set(null)

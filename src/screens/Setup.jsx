@@ -97,7 +97,7 @@ export function Setup({ navigate }) {
       <header className="navbar">
         <div className="lead">
           <button className="btn back-btn" onClick={() => navigate('/')}>
-            <Icon name="back" /> Projects
+            <Icon name="back" /> <span className="back-label">Projects</span>
           </button>
         </div>
         <div className="center">{p.name}</div>

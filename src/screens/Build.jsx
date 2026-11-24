@@ -60,11 +60,11 @@ export function Build({ navigate }) {
       <header className="navbar">
         <div className="lead">
           <button className="btn back-btn" onClick={() => navigate('/')}>
-            <Icon name="back" /> Projects
+            <Icon name="back" /> <span className="back-label">Projects</span>
           </button>
         </div>
         <div className="center pill">
-          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.name}</span>
+          <span className="name" style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.name}</span>
           <div className="progress-pill" aria-label={`${pr.placed} of ${pr.total} placed`}>
             <div className="track">
               <div className="fill" style={{ width: `${(pr.placed / Math.max(1, pr.total)) * 100}%` }} />
@@ -75,7 +75,7 @@ export function Build({ navigate }) {
           </div>
         </div>
         <div className="trail">
-          <button className="btn icon sm plain" onClick={() => navigate(`/p/${p.id}/setup`)} aria-label="Setup" title="Setup">
+          <button className="btn icon sm plain setup-btn" onClick={() => navigate(`/p/${p.id}/setup`)} aria-label="Setup" title="Setup">
             <Icon name="sliders" />
           </button>
           <CostChip />
