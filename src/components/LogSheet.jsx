@@ -75,7 +75,7 @@ export function LogSheet() {
                       <td>{t.tokens.toLocaleString()}</td>
                       <td>
                         {formatUsd(t.cost)}
-                        {t.unknown > 0 && <span style={{ color: 'var(--orange)' }}> + {t.unknown} unknown</span>}
+                        {t.unknown > 0 && <span style={{ color: 'var(--mark)' }}> + {t.unknown} unknown</span>}
                       </td>
                     </tr>
                   )

@@ -476,7 +476,7 @@ export default function BoardView3D({ project, side = 'top', highlightRef = null
       const { model, markMats } = buildModel(p, g)
       place.add(model)
       const r = Math.max(Math.hypot(ex.w, ex.h) / 2, 0.8)
-      const ringMat = new THREE.MeshBasicMaterial({ color: '#0a84ff', transparent: true, opacity: 0, side: THREE.DoubleSide, depthWrite: false })
+      const ringMat = new THREE.MeshBasicMaterial({ color: '#ffffff', transparent: true, opacity: 0, side: THREE.DoubleSide, depthWrite: false })
       const ring = new THREE.Mesh(frameGeometry(ex.w, ex.h, Math.max(vw, vh)), ringMat)
       ring.position.set(ex.cx, ex.cy, 0.04)
       place.add(ring)
@@ -541,12 +541,12 @@ export default function BoardView3D({ project, side = 'top', highlightRef = null
       let color = null
       if (rv === 'ok') color = '#30d158'
       else if (rv === 'problem') color = '#ff453a'
-      else if (rv === 'unclear' || rv === 'error') color = '#ffd60a'
+      else if (rv === 'unclear' || rv === 'error') color = '#ffc61a'
       else if (v?.verdict === 'problem' && v.user !== 'ok') color = '#ff453a'
-      else if (st === STATUS.skipped) color = '#ff9f0a'
-      if (isCur) color = '#0a84ff'
-      if (ref === highlightRef || ref === calibrateRef) color = '#64d2ff'
-      if (ref === activeRef) color = '#0a84ff'
+      else if (st === STATUS.skipped) color = '#ffc61a'
+      if (isCur) color = '#ffffff'
+      if (ref === highlightRef || ref === calibrateRef) color = '#ffffff'
+      if (ref === activeRef) color = '#ffffff'
       pt.ringColor = color
       if (color) pt.ringMat.color.set(color)
       pt.pulse = isCur || ref === highlightRef || ref === calibrateRef || ref === activeRef

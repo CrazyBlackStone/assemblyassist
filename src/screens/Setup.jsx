@@ -18,9 +18,9 @@ const BoardView3D = lazy(() => import('../components/BoardView3D.jsx'))
 // No accept filters: Allegro (.art), Altium (.GTL, .TXT drill), Eagle (.cmp) and others all
 // use different extensions; files are identified by content instead.
 const FILE_ROWS = [
-  { key: 'gerber', label: 'Gerbers', hint: 'Fab .zip or layer files', icon: 'layers', color: 'var(--green)', multiple: true },
-  { key: 'cpl', label: 'Placement', hint: 'Pick-and-place (CPL)', icon: 'pin', color: 'var(--blue)' },
-  { key: 'bom', label: 'Bill of Materials', hint: 'Optional', icon: 'table', color: 'var(--orange)' },
+  { key: 'gerber', label: 'Gerbers', hint: 'Fab .zip or layer files', icon: 'layers', multiple: true },
+  { key: 'cpl', label: 'Placement', hint: 'Pick-and-place (CPL)', icon: 'pin' },
+  { key: 'bom', label: 'Bill of Materials', hint: 'Optional', icon: 'table' },
 ]
 
 /** A Settings-style row that is also a file picker and a drop target. */
@@ -38,7 +38,7 @@ function FileRow({ row, file, error, busy, onFiles }) {
       }}
     >
       <input type="file" multiple={row.multiple} onChange={(e) => onFiles([...e.target.files])} aria-label={row.label} />
-      <span className="row-icon" style={{ background: row.color }}>
+      <span className="row-icon">
         <Icon name={row.icon} />
       </span>
       <span className="row-main">
@@ -123,7 +123,7 @@ export function Setup({ navigate }) {
               ))}
               {p.files.netlist && (
                 <div className="row has-icon">
-                  <span className="row-icon" style={{ background: 'var(--purple)' }}>
+                  <span className="row-icon">
                     <Icon name="net" />
                   </span>
                   <span className="row-main">
@@ -190,7 +190,7 @@ export function Setup({ navigate }) {
             <h2 className="section-title">Assembly</h2>
             <div className="list">
               <div className="row has-icon">
-                <span className="row-icon" style={{ background: 'var(--orange)' }}>
+                <span className="row-icon">
                   <Icon name="flame" />
                 </span>
                 <span className="row-main">
@@ -200,7 +200,7 @@ export function Setup({ navigate }) {
                 <Switch checked={s.verifySoldering} onChange={(v) => dispatch({ type: 'setting', key: 'verifySoldering', value: v })} label="Check soldering" />
               </div>
               <div className="row has-icon">
-                <span className="row-icon" style={{ background: 'var(--blue)' }}>
+                <span className="row-icon">
                   <Icon name="camera" />
                 </span>
                 <span className="row-main">
@@ -209,7 +209,7 @@ export function Setup({ navigate }) {
                 <Seg value={s.cameraSource} options={[['phone', 'Phone'], ['local', 'This Device']]} onChange={(v) => dispatch({ type: 'setting', key: 'cameraSource', value: v })} />
               </div>
               <div className="row has-icon">
-                <span className="row-icon" style={{ background: 'var(--red)' }}>
+                <span className="row-icon">
                   <Icon name="mic" />
                 </span>
                 <span className="row-main">
@@ -218,7 +218,7 @@ export function Setup({ navigate }) {
                 <Seg value={s.micSource} options={[['laptop', 'Laptop'], ['phone', 'Phone']]} onChange={(v) => dispatch({ type: 'setting', key: 'micSource', value: v })} />
               </div>
               <button className="row has-icon button" style={{ width: '100%', border: 0, background: 'transparent', textAlign: 'left' }} onClick={() => dispatch({ type: 'setting', key: 'viewRotation', value: ((s.viewRotation ?? 0) + 90) % 360 })}>
-                <span className="row-icon" style={{ background: 'var(--label-2)' }}>
+                <span className="row-icon">
                   <Icon name="rotate" />
                 </span>
                 <span className="row-main">
@@ -309,7 +309,7 @@ function PhonePair() {
       </div>
       <p className="section-foot">
         Won’t connect?{' '}
-        <a href="https://github.com/CrazyBlackStone/assemblyassist/blob/main/docs/phone-hotspot.md" target="_blank" rel="noreferrer" style={{ color: 'var(--blue)', textDecoration: 'none' }}>
+        <a href="https://github.com/CrazyBlackStone/assemblyassist/blob/main/docs/phone-hotspot.md" target="_blank" rel="noreferrer">
           Use the phone’s hotspot
         </a>
         . Don’t point the camera at confidential designs.

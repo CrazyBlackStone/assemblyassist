@@ -21,7 +21,7 @@ export function PartPanel({ project }) {
       <section className="panel p1 glass" aria-label="Current part">
         <div>
           <div className="ref">Done</div>
-          <div className="val" style={{ color: 'var(--green)' }}>
+          <div className="val">
             {pr.placed} of {pr.total} placed
           </div>
         </div>
