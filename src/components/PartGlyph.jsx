@@ -11,6 +11,9 @@ function bodyStyle(part, g) {
   const p = refPrefix(part.ref)
   const m = part.polarity?.marking
   if (g.family === 'header') return { fill: '#141416', stroke: '#2b2b30' }
+  if (g.style === 'usb') return { fill: '#aab0b8', stroke: '#7d838b' }
+  if (g.style === 'fpc') return { fill: '#dccba4', stroke: '#b3a27c' }
+  if (g.style === 'elec' || g.style === 'film') return { fill: '#3a4a66', stroke: '#26324a' }
   if (g.family === 'switch') return { fill: '#8d939b', stroke: '#5d636b' }
   if (m === 'tantalum') return { fill: '#d6a22a', stroke: '#a77c18' }
   if (m === 'electrolytic') return { fill: '#3a4a66', stroke: '#26324a' }
@@ -64,17 +67,21 @@ export function PartBody({ part, g, highlight = false, scale = 1 }) {
 const ARROWS = { top: '↑', 'top-right': '↗', right: '→', 'bottom-right': '↘', bottom: '↓', 'bottom-left': '↙', left: '←', 'top-left': '↖', centre: '•' }
 const MARK_NAMES = { pin1: 'Pin 1', cathode: 'Cathode', plus: 'Plus +', minus: 'Minus −' }
 
-/** Mark name + arrow for the part as it appears on screen (part rotation + view rotation). */
-export function orientationLabel(g, rot, viewRotation) {
+/**
+ * Mark name + arrow for the part as it appears on screen (part rotation + view rotation).
+ * A back-side part is seen with the board flipped over, which turns its rotation around.
+ */
+export function orientationLabel(g, rot, viewRotation, side = 'top') {
   if (!g.mark) return null
-  const dir = markDirection(g, rot - viewRotation)
+  const dir = markDirection(g, (side === 'bottom' ? -rot : rot) - viewRotation)
   return { name: MARK_NAMES[g.mark.type], arrow: ARROWS[dir] ?? '', dir }
 }
 
 /** Standalone drawing for the part panel, rotated as it will sit on the board. */
-export function PartGlyph({ part, g, rot, viewRotation }) {
+export function PartGlyph({ part, g, rot, viewRotation, side = 'top' }) {
   const e = packageExtent(g)
   const r = Math.hypot(e.w, e.h) * 0.62
+  const turn = side === 'bottom' ? viewRotation + rot : viewRotation - rot
   return (
     <svg viewBox={`${-r} ${-r} ${2 * r} ${2 * r}`} role="img" aria-label={`${part.ref} package`}>
       <defs>
@@ -83,7 +90,7 @@ export function PartGlyph({ part, g, rot, viewRotation }) {
         </filter>
       </defs>
       <circle cx={0} cy={0} r={r * 0.97} fill="none" stroke="rgba(255,255,255,0.08)" strokeWidth={r * 0.01} />
-      <g transform={`rotate(${viewRotation - rot}) translate(${-e.cx} ${e.cy})`}>
+      <g transform={`rotate(${turn}) translate(${-e.cx} ${e.cy})`}>
         <PartBody part={part} g={g} highlight scale={r / 4} />
       </g>
     </svg>

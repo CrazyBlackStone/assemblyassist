@@ -29,6 +29,14 @@ describe('voice grammar', () => {
     expect(cmd('capacitors next').categoryId).toBe(plan.categories.find((c) => c.name === 'Capacitors').id)
     expect(cmd('go to U2')).toEqual({ type: 'jump', ref: 'U2' })
   })
+  it('controls the board view and sides', () => {
+    expect(cmd('zoom in')).toEqual({ type: 'view', view: 'zoom-in' })
+    expect(cmd('zoom on C8')).toEqual({ type: 'view', view: 'focus', ref: 'C8' })
+    expect(cmd('show the whole board').view).toBe('fit')
+    expect(cmd('show the back')).toEqual({ type: 'view-side', side: 'bottom' })
+    expect(cmd('do the back first')).toEqual({ type: 'side-first', side: 'bottom' })
+    expect(cmd('back').type).toBe('back')
+  })
   it('sends anything longer to the language model', () => {
     expect(cmd('next do the resistors before the LEDs').type).toBe('unknown')
     expect(cmd('how do I fix a bridge').type).toBe('unknown')

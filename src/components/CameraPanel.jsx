@@ -4,6 +4,7 @@ import { useStore } from '../lib/store.js'
 import { camera, registerVideo, openLocalCamera } from '../lib/camera.js'
 import { pairing, startHost, pairUrl } from '../lib/pairing/pairing.js'
 import { ui } from '../state/ui.js'
+import { calibrationFor, currentSide } from '../state/projects.js'
 import { crops } from '../lib/verify/verify.js'
 import { calibrationTap, completeTap, closeCheck, confirmCheck, checkPart, startCalibration, closeReview } from '../lib/verify/flow.js'
 import { setUi } from '../state/ui.js'
@@ -65,6 +66,7 @@ export function CameraPanel({ project }) {
   }
 
   const overlay = (u.check && u.check.status !== 'tap') || u.review
+  const calibrated = Boolean(calibrationFor(project, currentSide(project)))
   const promptRef = u.calibrating ? u.calibrating.refs[u.calibrating.taps.length] : u.tapRequest?.ref
 
   return (
@@ -94,7 +96,7 @@ export function CameraPanel({ project }) {
 
       {stream && !overlay && !promptRef && (
         <div className="corner tr">
-          <button className={`btn icon ${project.calibration ? 'on' : ''}`} onClick={startCalibration} title={project.calibration ? 'Recalibrate camera' : 'Calibrate camera'} aria-label="Calibrate camera">
+          <button className={`btn icon ${calibrated ? 'on' : ''}`} onClick={() => startCalibration()} title={calibrated ? 'Recalibrate camera' : 'Calibrate camera'} aria-label="Calibrate camera">
             <Icon name="target" />
           </button>
         </div>

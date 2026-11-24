@@ -1,22 +1,26 @@
-import { useEffect, useState } from 'react'
+import { lazy, Suspense, useEffect, useState } from 'react'
 import QRCode from 'qrcode'
 import { useStore } from '../lib/store.js'
 import { project, dispatch, saveProject } from '../state/projects.js'
 import { pairing, pairUrl, startHost } from '../lib/pairing/pairing.js'
-import { collectGerbers } from '../lib/gerber/render.js'
-import { rebuild } from '../lib/projects/load.js'
+import { collectFiles, sortFiles } from '../lib/gerber/render.js'
+import { LAYER_LABEL } from '../lib/gerber/identify.js'
+import { rebuild, assignFiles } from '../lib/projects/load.js'
 import { defaultPlan } from '../lib/plan/plan.js'
 import * as OrderPlan from '../lib/ai/tasks/orderPlan.js'
 import { useAiTask } from '../lib/ai/useAiTask.js'
-import { BoardView } from '../components/BoardView.jsx'
 import { BomList } from '../components/BomList.jsx'
 import { CostChip } from '../components/BuildChrome.jsx'
 import { Icon, AiBadge, MarkWrong, Switch, Seg } from '../components/ui.jsx'
 
+const BoardView3D = lazy(() => import('../components/BoardView3D.jsx'))
+
+// No accept filters: Allegro (.art), Altium (.GTL, .TXT drill), Eagle (.cmp) and others all
+// use different extensions; files are identified by content instead.
 const TILES = [
-  { key: 'gerber', label: 'Gerber', hint: '.zip or files', accept: '.zip,.gbr,.ger,.gtl,.gbl,.gto,.gbo,.gts,.gbs,.gtp,.gm1,.gko,.drl,.xln,.txt', multiple: true },
-  { key: 'bom', label: 'BOM', hint: '.csv', accept: '.csv,.tsv,.txt' },
-  { key: 'cpl', label: 'CPL', hint: 'pick-and-place .csv / .pos', accept: '.csv,.pos,.tsv,.txt' },
+  { key: 'gerber', label: 'Gerber', hint: 'fab .zip or files', multiple: true },
+  { key: 'cpl', label: 'CPL', hint: 'pick-and-place' },
+  { key: 'bom', label: 'BOM', hint: 'optional' },
 ]
 
 function DropTile({ tile, file, error, busy, onFiles }) {
@@ -32,7 +36,7 @@ function DropTile({ tile, file, error, busy, onFiles }) {
         onFiles([...e.dataTransfer.files])
       }}
     >
-      <input type="file" accept={tile.accept} multiple={tile.multiple} onChange={(e) => onFiles([...e.target.files])} />
+      <input type="file" multiple={tile.multiple} onChange={(e) => onFiles([...e.target.files])} />
       {busy ? <div className="spinner" /> : <Icon name={file && !error ? 'check' : 'upload'} />}
       <span className="big">{tile.label}</span>
       <span className="file">{error ? <span className="err-text">{error}</span> : (file ?? tile.hint)}</span>
@@ -45,6 +49,7 @@ export function Setup({ navigate }) {
   const [errors, setErrors] = useState({})
   const [notes, setNotes] = useState([])
   const [busy, setBusy] = useState(null)
+  const [previewSide, setPreviewSide] = useState('top')
 
   if (!p) return null
   const s = p.settings
@@ -54,10 +59,15 @@ export function Setup({ navigate }) {
     setBusy(key)
     try {
       let files = { ...p.files }
-      if (key === 'gerber') files.gerbers = await collectGerbers(list)
-      else files[key] = { name: list[0].name, text: await list[0].text() }
+      // A fab zip (or several files) is sorted by content; it may also carry the CPL, BOM and netlist.
+      if (key === 'gerber' || list.length > 1 || /\.zip$/i.test(list[0].name)) {
+        files = assignFiles(files, sortFiles(await collectFiles(list)), key)
+      } else {
+        files[key] = { name: list[0].name, text: await list[0].text() }
+      }
+      const same = (a, b) => (a?.name ?? null) === (b?.name ?? null) && (a?.text?.length ?? 0) === (b?.text?.length ?? 0)
+      const bomChanged = !same(files.bom, p.files.bom) || !same(files.cpl, p.files.cpl) || !same(files.netlist, p.files.netlist)
       const hasProgress = Object.keys(p.status).length > 0
-      const bomChanged = key !== 'gerber'
       if (bomChanged && hasProgress && !window.confirm('Replacing this file resets the build progress. Continue?')) return
       const { project: next, errors: errs, notes: ns } = await rebuild({ ...p, files }, { bomChanged })
       project.set(next)
@@ -69,7 +79,8 @@ export function Setup({ navigate }) {
     }
   }
 
-  const fileLabel = { gerber: p.files.gerbers.length ? `${p.files.gerbers.length} files` : null, bom: p.files.bom?.name, cpl: p.files.cpl?.name }
+  const fileLabel = { gerber: p.files.gerbers.length ? `${p.files.gerbers.length} layers` : null, bom: p.files.bom?.name, cpl: p.files.cpl?.name }
+  const hasBack = Boolean(p.render?.svgBottom) || Object.values(p.board?.parts ?? {}).some((x) => x.loc?.side === 'bottom')
   const ready = Boolean(p.board && p.plan)
 
   return (
@@ -102,9 +113,19 @@ export function Setup({ navigate }) {
             </div>
             {p.render && (
               <div className="preview" style={{ position: 'relative' }}>
-                <BoardView project={{ ...p, current: null }} />
+                <Suspense fallback={<div className="empty-cam"><div className="spinner" /></div>}>
+                  <BoardView3D project={{ ...p, current: null }} side={previewSide} compact onFlip={null} />
+                </Suspense>
+                {hasBack && (
+                  <div className="corner tr">
+                    <button className="btn sm" onClick={() => setPreviewSide(previewSide === 'top' ? 'bottom' : 'top')}>
+                      <Icon name="flip" /> {previewSide === 'top' ? 'Back' : 'Front'}
+                    </button>
+                  </div>
+                )}
               </div>
             )}
+            {p.files.gerbers.length > 0 && <LayerList files={p.files} />}
             {p.board && (
               <div className="stats">
                 <span className="chip">{Object.keys(p.board.parts).length} parts</span>
@@ -165,6 +186,42 @@ export function Setup({ navigate }) {
         </div>
       </main>
     </div>
+  )
+}
+
+const ORDER = ['copper', 'soldermask', 'silkscreen', 'solderpaste', 'outline', 'drill']
+
+/** Which layer each uploaded file was recognised as, in a few chips. */
+function LayerList({ files }) {
+  const sideName = (s) => (s === 'top' ? 'Top' : s === 'bottom' ? 'Bottom' : '')
+  const layers = [...files.gerbers].sort((a, b) => ORDER.indexOf(a.type) - ORDER.indexOf(b.type))
+  return (
+    <details className="layers-box">
+      <summary className="faint" style={{ fontSize: '0.85rem', cursor: 'pointer' }}>
+        {layers.length} layers{files.netlist ? ' · netlist' : ''}
+        {files.unused?.length ? ` · ${files.unused.length} not used` : ''}
+      </summary>
+      <div className="layers" style={{ marginTop: 8 }}>
+        {layers.map((l) => (
+          <span key={l.name} className="chip" title={l.name}>
+            <b>
+              {sideName(l.side)} {LAYER_LABEL[l.type] ?? l.type}
+            </b>{' '}
+            <span className="faint">{l.name}</span>
+          </span>
+        ))}
+        {files.netlist && (
+          <span className="chip" title="Pad positions for every part">
+            <b>Netlist</b> <span className="faint">{files.netlist.name}</span>
+          </span>
+        )}
+        {(files.unused ?? []).map((l) => (
+          <span key={l.name} className="chip faint" title={LAYER_LABEL[l.type]}>
+            {l.name}
+          </span>
+        ))}
+      </div>
+    </details>
   )
 }
 

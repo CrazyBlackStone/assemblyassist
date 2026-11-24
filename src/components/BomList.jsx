@@ -2,7 +2,8 @@ import { useEffect, useState } from 'react'
 import { DndContext, DragOverlay, KeyboardSensor, PointerSensor, closestCorners, useSensor, useSensors } from '@dnd-kit/core'
 import { SortableContext, arrayMove, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
-import { AiBadge } from './ui.jsx'
+import { AiBadge, Icon } from './ui.jsx'
+import { SIDE_NAME } from '../lib/plan/plan.js'
 
 const CAT = 'cat:'
 
@@ -59,7 +60,7 @@ function SortableCategory({ cat, children, aiPlan }) {
  * Drag to reorder parts (within and across categories) and whole categories.
  * onChange receives the new plan when a drag ends; a tap on a row calls onPick.
  */
-export function BomList({ plan, board, status = {}, current = null, verifications = {}, onChange, onPick }) {
+export function BomList({ plan, board, status = {}, current = null, verifications = {}, onChange, onPick, onSwapSides }) {
   const [cats, setCats] = useState(plan.categories)
   const [active, setActive] = useState(null)
   useEffect(() => {
@@ -68,6 +69,8 @@ export function BomList({ plan, board, status = {}, current = null, verification
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }), useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }))
   const ctx = { status, current, verifications }
   const aiPlan = plan.source === 'ai' ? 'ai' : plan.source === 'simulated' ? 'simulated' : null
+  const sides = plan.sides ?? ['top', 'bottom']
+  const twoSided = new Set(cats.map((c) => c.side ?? 'top')).size > 1
 
   const catOf = (list, id) => (String(id).startsWith(CAT) ? list.find((c) => CAT + c.id === id) : list.find((c) => c.refs.includes(id)))
 
@@ -77,6 +80,7 @@ export function BomList({ plan, board, status = {}, current = null, verification
       const from = catOf(list, a.id)
       const to = catOf(list, over.id)
       if (!from || !to || from === to) return list
+      if ((from.side ?? 'top') !== (to.side ?? 'top')) return list // a part can't change sides
       const idx = String(over.id).startsWith(CAT) ? to.refs.length : to.refs.indexOf(over.id)
       return list.map((c) => {
         if (c === from) return { ...c, refs: c.refs.filter((r) => r !== a.id) }
@@ -94,7 +98,7 @@ export function BomList({ plan, board, status = {}, current = null, verification
         const from = cats.findIndex((c) => CAT + c.id === a.id)
         const target = catOf(cats, over.id)
         const to = cats.indexOf(target)
-        if (from >= 0 && to >= 0 && from !== to) next = arrayMove(cats, from, to)
+        if (from >= 0 && to >= 0 && from !== to && (cats[from].side ?? 'top') === (target.side ?? 'top')) next = arrayMove(cats, from, to)
       } else {
         const c = catOf(cats, a.id)
         const from = c.refs.indexOf(a.id)
@@ -110,17 +114,35 @@ export function BomList({ plan, board, status = {}, current = null, verification
   return (
     <DndContext sensors={sensors} collisionDetection={closestCorners} onDragStart={({ active: a }) => setActive(a.id)} onDragOver={onDragOver} onDragEnd={onDragEnd} onDragCancel={() => (setActive(null), setCats(plan.categories))}>
       <div className="bom">
-        <SortableContext items={cats.map((c) => CAT + c.id)} strategy={verticalListSortingStrategy}>
-          {cats.map((c) => (
-            <SortableCategory key={c.id} cat={c} aiPlan={aiPlan}>
-              <SortableContext items={c.refs} strategy={verticalListSortingStrategy}>
-                {c.refs.map((r) => (
-                  <SortableItem key={r} id={r} board={board} ctx={ctx} onPick={onPick} />
+        {sides.map((side, si) => {
+          const list = cats.filter((c) => (c.side ?? 'top') === side)
+          if (!list.length) return null
+          return (
+            <div key={side} className="bom">
+              {twoSided && (
+                <div className="side-head">
+                  {SIDE_NAME[side]} <span className="count">{list.reduce((n, c) => n + c.refs.length, 0)}</span>
+                  {si === 0 && onSwapSides && (
+                    <button className="btn sm" onClick={onSwapSides} title="Do the other side first">
+                      <Icon name="swap" /> {SIDE_NAME[sides[1]]} first
+                    </button>
+                  )}
+                </div>
+              )}
+              <SortableContext items={list.map((c) => CAT + c.id)} strategy={verticalListSortingStrategy}>
+                {list.map((c) => (
+                  <SortableCategory key={c.id} cat={c} aiPlan={aiPlan}>
+                    <SortableContext items={c.refs} strategy={verticalListSortingStrategy}>
+                      {c.refs.map((r) => (
+                        <SortableItem key={r} id={r} board={board} ctx={ctx} onPick={onPick} />
+                      ))}
+                    </SortableContext>
+                  </SortableCategory>
                 ))}
               </SortableContext>
-            </SortableCategory>
-          ))}
-        </SortableContext>
+            </div>
+          )
+        })}
       </div>
       <DragOverlay>
         {active && !String(active).startsWith(CAT) && <Row ref_={active} board={board} ctx={ctx} overlay />}

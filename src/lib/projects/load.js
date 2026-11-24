@@ -1,5 +1,7 @@
 import { loadBoardFromText, BoardFileError } from '../bom/board.js'
 import { renderTop, fallbackRender, alignToRender } from '../gerber/render.js'
+import { identifyFile } from '../gerber/identify.js'
+import { parseIpc356 } from '../bom/ipc356.js'
 import { newProject, saveProject, projectReducer, workspace } from '../../state/projects.js'
 import { demoBoardText } from '../../data/demoBoard.js'
 
@@ -11,13 +13,24 @@ import { demoBoardText } from '../../data/demoBoard.js'
 export async function rebuild(project, { bomChanged = true } = {}) {
   const errors = {}
   const notes = []
-  const { gerbers, bom, cpl } = project.files
+  const { bom, cpl, netlist } = project.files
+  const gerbers = project.files.gerbers.map((g) => (g.type ? g : { ...g, ...identifyFile(g.name, g.text) }))
   let p = project
   let board = project.board
 
-  if (bom && bomChanged) {
+  let pads = null
+  if (netlist) {
     try {
-      board = loadBoardFromText({ name: project.name, bomText: bom.text, pnpText: cpl?.text ?? null })
+      pads = parseIpc356(netlist.text).pads
+      notes.push(`Footprints from ${netlist.name}: ${Object.keys(pads).length} parts.`)
+    } catch {
+      notes.push(`Could not read ${netlist.name}; using package sizes from names.`)
+    }
+  }
+
+  if ((bom || cpl) && bomChanged) {
+    try {
+      board = loadBoardFromText({ name: project.name, bomText: bom?.text ?? null, pnpText: cpl?.text ?? null, pads })
       p = projectReducer(p, { type: 'load-board', board })
     } catch (e) {
       const msg = e instanceof BoardFileError ? e.message : `Could not read the files: ${e.message}`
@@ -50,11 +63,25 @@ export async function rebuild(project, { bomChanged = true } = {}) {
 
 const demoGerbers = import.meta.glob('../../data/demo/gerbers/*', { query: '?raw', import: 'default', eager: true })
 
+/**
+ * Put files from one upload into the project's slots. A fabrication zip often carries the
+ * placement file, BOM and netlist too; they fill empty slots (or the slot that was targeted).
+ */
+export function assignFiles(current, sorted, target) {
+  const files = { ...current }
+  if (sorted.gerbers.length) files.gerbers = sorted.gerbers
+  if (sorted.netlist) files.netlist = { name: sorted.netlist.name, text: sorted.netlist.text }
+  if (sorted.placement && (target === 'cpl' || !files.cpl)) files.cpl = { name: sorted.placement.name, text: sorted.placement.text }
+  if (sorted.bom && (target === 'bom' || !files.bom)) files.bom = { name: sorted.bom.name, text: sorted.bom.text }
+  files.unused = sorted.unused.map((f) => ({ name: f.name, type: f.type }))
+  return files
+}
+
 export async function createDemoProject() {
   const base = newProject('Demo board')
   base.demo = true
   base.files = {
-    gerbers: Object.entries(demoGerbers).map(([path, text]) => ({ name: path.split('/').pop(), text })),
+    gerbers: Object.entries(demoGerbers).map(([path, text]) => ({ name: path.split('/').pop(), text, ...identifyFile(path, text) })),
     bom: { name: 'demo-bom.csv', text: demoBoardText.bomText },
     cpl: { name: 'demo-cpl.csv', text: demoBoardText.pnpText },
   }

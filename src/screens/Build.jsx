@@ -1,18 +1,25 @@
-import { useEffect } from 'react'
+import { lazy, Suspense, useEffect } from 'react'
 import { useStore } from '../lib/store.js'
-import { project, dispatch, progress } from '../state/projects.js'
-import { ui } from '../state/ui.js'
+import { project, dispatch, progress, currentSide } from '../state/projects.js'
+import { ui, setUi } from '../state/ui.js'
 import { runCommand } from '../lib/voice/controller.js'
 import { runReview } from '../lib/verify/flow.js'
-import { BoardView } from '../components/BoardView.jsx'
 import { PartPanel } from '../components/PartPanel.jsx'
 import { CameraPanel } from '../components/CameraPanel.jsx'
 import { BomRail, VoiceBar, CostChip } from '../components/BuildChrome.jsx'
 import { Icon } from '../components/ui.jsx'
 
+const BoardView3D = lazy(() => import('../components/BoardView3D.jsx'))
+
 export function Build({ navigate }) {
   const p = useStore(project)
   const u = useStore(ui)
+  const partSide = currentSide(p)
+
+  // Follow the current part's side again whenever it changes.
+  useEffect(() => {
+    setUi({ viewSide: null })
+  }, [partSide])
 
   useEffect(() => {
     const onKey = (e) => {
@@ -73,19 +80,24 @@ export function Build({ navigate }) {
         <PartPanel project={p} />
         <section className="panel p2 glass" aria-label="Board">
           {p.render ? (
-            <BoardView
-              project={p}
-              highlightRef={u.highlightRef}
-              activeRef={u.review?.activeRef ?? null}
-              calibrateRef={u.calibrating ? u.calibrating.refs[u.calibrating.taps.length] : (u.tapRequest?.ref ?? null)}
-              reviewItems={u.review?.items ?? null}
-              onPick={(ref) => dispatch({ type: 'jump', ref })}
-            />
+            <Suspense fallback={<div className="empty-cam"><div className="spinner" /></div>}>
+              <BoardView3D
+                project={p}
+                side={u.viewSide ?? partSide}
+                highlightRef={u.highlightRef}
+                activeRef={u.review?.activeRef ?? null}
+                calibrateRef={u.calibrating ? u.calibrating.refs[u.calibrating.taps.length] : (u.tapRequest?.ref ?? null)}
+                reviewItems={u.review?.items ?? null}
+                viewCmd={u.viewCmd}
+                onPick={(ref) => dispatch({ type: 'jump', ref })}
+                onFlip={() => setUi({ viewSide: (u.viewSide ?? partSide) === 'top' ? 'bottom' : 'top' })}
+              />
+            </Suspense>
           ) : (
             <div className="empty-cam muted">No positions: add a CPL file to see the board.</div>
           )}
           <div className="corner br">
-            <button className="btn icon sm" onClick={() => dispatch({ type: 'setting', key: 'viewRotation', value: ((p.settings.viewRotation ?? 0) + 90) % 360 })} aria-label="Turn board view" title="Turn board view">
+            <button className="btn icon sm" onClick={() => dispatch({ type: 'setting', key: 'viewRotation', value: ((p.settings.viewRotation ?? 0) + 90) % 360 })} aria-label="Turn board view" title="Turn board view 90°">
               <Icon name="rotate" />
             </button>
           </div>

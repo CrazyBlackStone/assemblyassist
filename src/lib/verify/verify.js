@@ -4,6 +4,7 @@ import { cropCanvas, assessQuality, toJpegDataUrl } from '../imaging/image.js'
 import * as Verify from '../ai/tasks/verify.js'
 import { runTask, taskConfig } from '../ai/provider.js'
 import { createStore } from '../store.js'
+import { calibrationFor } from '../../state/projects.js'
 
 // Placement verification: crop one part out of a full-resolution frame and ask the
 // vision model about it. Crops stay in memory for this session only.
@@ -62,7 +63,7 @@ export function tapCrop(src, tap) {
  */
 export async function verifyPart({ project, ref, still, tap, signal }) {
   const part = project.board.parts[ref]
-  const cal = project.calibration
+  const cal = calibrationFor(project, part.loc?.side === 'bottom' ? 'bottom' : 'top')
   let cropped
   if (cal && part.loc) cropped = partCrop(still, part, cal)
   else if (tap) cropped = tapCrop(still, tap)

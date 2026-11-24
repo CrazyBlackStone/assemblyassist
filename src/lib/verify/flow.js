@@ -1,4 +1,4 @@
-import { project, dispatch, STATUS } from '../../state/projects.js'
+import { project, dispatch, STATUS, currentSide, calibrationFor } from '../../state/projects.js'
 import { ui, setUi, toast } from '../../state/ui.js'
 import { captureStill, streamFor } from '../camera.js'
 import { solveCalibration } from '../geometry/board.js'
@@ -6,6 +6,7 @@ import { sequenceOf } from '../plan/plan.js'
 import { verifyPart, crops } from './verify.js'
 import { speak, sayRef } from '../voice/speech.js'
 import { ISSUE_LABELS } from '../ai/tasks/verify.js'
+import { packageGeometry, packageExtent, toBoard } from '../bom/packages.js'
 
 // Orchestrates checks so buttons and voice behave identically.
 
@@ -39,7 +40,8 @@ export async function checkPart(ref) {
     return
   }
   let tap = null
-  if (!p.calibration) {
+  const side = p.board.parts[ref]?.loc?.side === 'bottom' ? 'bottom' : 'top'
+  if (!calibrationFor(p, side)) {
     setUi({ tapRequest: { ref }, check: { ref, status: 'tap' } })
     tap = await new Promise((resolve) => (pendingTap = resolve))
     setUi({ tapRequest: null })
@@ -87,9 +89,12 @@ export function placeCurrent() {
 
 // ---------------- calibration ----------------
 
-/** Two located top-side parts far apart, preferring big ones (easy to tap). */
-export function calibrationRefs(board) {
-  const parts = Object.values(board.parts).filter((q) => q.loc && q.loc.side !== 'bottom')
+/**
+ * Two parts far apart that are visible from the given side (parts on that side, or
+ * through-hole parts, whose pins show on both).
+ */
+export function calibrationRefs(board, side = 'top') {
+  const parts = Object.values(board.parts).filter((q) => q.loc && ((q.loc.side === 'bottom') === (side === 'bottom') || packageGeometry(q).tht))
   let best = null
   for (let i = 0; i < parts.length; i++)
     for (let j = i + 1; j < parts.length; j++) {
@@ -99,13 +104,14 @@ export function calibrationRefs(board) {
   return best?.refs ?? null
 }
 
-export function startCalibration() {
+export function startCalibration(sideArg) {
   const p = project.get()
-  const refs = p?.board ? calibrationRefs(p.board) : null
+  const side = sideArg ?? currentSide(p)
+  const refs = p?.board ? calibrationRefs(p.board, side) : null
   if (!refs) return toast('Needs a pick-and-place file')
   if (!hasCamera(p)) return toast('Connect the camera first')
   closeCheck()
-  setUi({ calibrating: { refs, taps: [] } })
+  setUi({ calibrating: { refs, taps: [], side } })
   speak(`Tap ${sayRef(refs[0])} on the camera view.`)
 }
 
@@ -119,9 +125,17 @@ export function calibrationTap(pt, aspect) {
     speak(`Now ${sayRef(c.refs[1])}.`)
     return
   }
-  const pairs = c.refs.map((ref, i) => ({ board: p.board.parts[ref].loc, image: taps[i] }))
-  const cal = solveCalibration(pairs, aspect, false)
-  dispatch({ type: 'calibration', calibration: cal })
+  // People tap the middle of the part, which is the footprint centre (not the placement
+  // origin, which is pin 1 for through-hole headers).
+  const centre = (ref) => {
+    const part = p.board.parts[ref]
+    const e = packageExtent(packageGeometry(part))
+    return toBoard({ x: e.cx, y: e.cy }, part.loc)
+  }
+  const pairs = c.refs.map((ref, i) => ({ board: centre(ref), image: taps[i] }))
+  // Looking at the back, the board is flipped over: the image is a mirror of the top view.
+  const cal = solveCalibration(pairs, aspect, c.side === 'bottom')
+  dispatch({ type: 'calibration', side: c.side, calibration: cal })
   setUi({ calibrating: null })
   toast(cal ? 'Camera calibrated' : 'Calibration failed, try again')
 }
@@ -134,16 +148,18 @@ export async function runReview() {
   const p = project.get()
   if (!p) return
   if (!hasCamera(p)) return toast('Connect the camera to review')
-  if (!p.calibration) {
+  const side = currentSide(p)
+  if (!calibrationFor(p, side)) {
     toast('Calibrate the camera first')
-    return startCalibration()
+    return startCalibration(side)
   }
   closeCheck()
   reviewCtrl?.abort()
   const ctrl = new AbortController()
   reviewCtrl = ctrl
-  const refs = sequenceOf(p.plan).filter((r) => p.status[r] === STATUS.placed)
-  if (!refs.length) return toast('Nothing placed yet')
+  // Review the side that is facing the camera.
+  const refs = sequenceOf(p.plan).filter((r) => p.status[r] === STATUS.placed && (p.board.parts[r].loc?.side === 'bottom') === (side === 'bottom'))
+  if (!refs.length) return toast('Nothing placed on this side yet')
   crops.reset()
   setUi({ review: { status: 'capturing', items: refs.map((ref) => ({ ref, status: 'wait' })), activeRef: null } })
   let still

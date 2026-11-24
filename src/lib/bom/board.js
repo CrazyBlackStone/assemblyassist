@@ -16,10 +16,12 @@ const BOM_COLS = {
 
 const PNP_COLS = {
   ref: ['Ref', 'Reference', 'Refs', 'Designator', 'RefDes', 'Part'],
-  x: ['PosX', 'Pos X', 'Mid X', 'Center-X(mm)', 'Center X', 'X', 'Ref X', 'LocationX'],
-  y: ['PosY', 'Pos Y', 'Mid Y', 'Center-Y(mm)', 'Center Y', 'Y', 'Ref Y', 'LocationY'],
+  x: ['PosX', 'Pos X', 'Mid X', 'MidX', 'Center-X(mm)', 'Center-X(mil)', 'Center-X', 'Center X', 'X', 'X (mm)', 'Ref X', 'RefX', 'LocationX', 'symbol_x'],
+  y: ['PosY', 'Pos Y', 'Mid Y', 'MidY', 'Center-Y(mm)', 'Center-Y(mil)', 'Center-Y', 'Center Y', 'Y', 'Y (mm)', 'Ref Y', 'RefY', 'LocationY', 'symbol_y'],
   rot: ['Rot', 'Rotation', 'Angle', 'Orientation'],
-  side: ['Side', 'Layer', 'TB', 'Top/Bottom'],
+  side: ['Side', 'Layer', 'TB', 'Top/Bottom', 'mirror'],
+  pkg: ['Package', 'Footprint', 'symbol_name', 'Pattern', 'Case'],
+  val: ['Val', 'Value', 'Comment'],
 }
 
 export class BoardFileError extends Error {}
@@ -62,31 +64,78 @@ export function parseBom(text) {
   return { rows: out, warnings, hasSparesColumn: Boolean(col.spares) }
 }
 
-/** KiCad's default ASCII .pos format: "# Ref Val Package PosX PosY Rot Side" + whitespace columns. */
-function kicadAsciiToCsv(text) {
-  const lines = text.split(/\r?\n/)
-  const headerLine = lines.find((l) => /^#\s*Ref\s+Val/i.test(l))
-  if (!headerLine) return null
-  const header = headerLine.replace(/^#\s*/, '').trim().split(/\s+/)
-  const body = lines
-    .filter((l) => l.trim() && !l.trim().startsWith('#') && !/^##/.test(l))
-    .map((l) => (l.match(/"[^"]*"|\S+/g) ?? []).map((c) => c.replace(/^"|"$/g, '')))
-    .filter((cells) => cells.length >= header.length)
-  const quote = (c) => `"${String(c).replace(/"/g, '""')}"`
-  return [header, ...body].map((r) => r.map(quote).join(',')).join('\n')
+const MM_PER = { mm: 1, mil: 0.0254, in: 25.4, um: 0.001, cm: 10 }
+
+/** Units from the file's preamble or column names; mm when nothing says otherwise. */
+function detectUnits(text) {
+  const head = text.slice(0, 3000)
+  const m =
+    /UUNITS\s*=\s*(\w+)/i.exec(head) ?? /Unit(?:s)?(?:\s+used)?\s*[:=]\s*(\w+)/i.exec(head) ?? /Center-X\((\w+)\)/i.exec(head) ?? /\d(mil|mm|in)\b/i.exec(head)
+  const u = (m?.[1] ?? 'mm').toLowerCase()
+  if (u.startsWith('mil')) return u === 'millimeters' || u === 'millimetres' ? 'mm' : 'mil'
+  if (u.startsWith('in')) return 'in'
+  if (u.startsWith('micron')) return 'um'
+  if (u.startsWith('centi')) return 'cm'
+  return 'mm'
 }
 
-/** Parse a pick-and-place file into { locations: {ref: {x,y,rot,side}}, warnings }. */
+const quote = (c) => `"${String(c).replace(/"/g, '""')}"`
+const toCsv = (header, rows) => [header, ...rows].map((r) => r.map(quote).join(',')).join('\n')
+
+/** Cadence Allegro place_txt: "refdes ! symbol_x ! symbol_y ! rotation ! mirror ! symbol_name". */
+function allegroToCsv(text) {
+  if (!/^\s*UUNITS\s*=/m.test(text) || !text.includes('!')) return null
+  const lines = text.split(/\r?\n/)
+  const headerLine = lines.find((l) => /^#.*refdes.*!/i.test(l))
+  const header = headerLine ? headerLine.replace(/^#/, '').split('!').map((h) => h.trim()) : ['refdes', 'symbol_x', 'symbol_y', 'rotation', 'mirror', 'symbol_name']
+  const rows = lines.filter((l) => l.includes('!') && !l.trim().startsWith('#')).map((l) => l.split('!').map((c) => c.trim()))
+  return toCsv(header, rows)
+}
+
+/**
+ * Whitespace-separated tables: KiCad ASCII .pos ("# Ref Val Package PosX PosY Rot Side") and
+ * Altium's text pick-and-place ("Designator Footprint Mid X Mid Y ... TB Rotation Comment").
+ */
+function whitespaceToCsv(text) {
+  const lines = text.split(/\r?\n/)
+  const refWords = /^(ref|refdes|designator|reference)$/i
+  const idx = lines.slice(0, 60).findIndex((l) => {
+    if (/[,;\t]/.test(l)) return false
+    const t = l.replace(/^#\s*/, '').trim().split(/\s+/)
+    return t.length >= 4 && refWords.test(t[0].replace(/"/g, ''))
+  })
+  if (idx < 0) return null
+  const header = lines[idx]
+    .replace(/^#\s*/, '')
+    .replace(/"/g, '')
+    .replace(/\b(Mid|Ref|Pad|Center)\s+([XY])\b/gi, '$1$2')
+    .trim()
+    .split(/\s+/)
+  const rows = lines
+    .slice(idx + 1)
+    .filter((l) => l.trim() && !l.trim().startsWith('#'))
+    .map((l) => (l.match(/"[^"]*"|\S+/g) ?? []).map((c) => c.replace(/^"|"$/g, '')))
+    .filter((cells) => cells.length >= Math.min(header.length, 4))
+    .map((cells) => (cells.length > header.length ? [...cells.slice(0, header.length - 1), cells.slice(header.length - 1).join(' ')] : cells))
+  return toCsv(header, rows)
+}
+
+/**
+ * Parse a pick-and-place / centroid / CPL file (KiCad, Altium, Allegro, JLCPCB, Eagle, generic
+ * CSV) into { locations: { ref: { x, y, rot, side, pkg, val } }, units, warnings }. Positions in mm.
+ */
 export function parsePnp(text) {
-  const csv = kicadAsciiToCsv(String(text)) ?? text
+  const raw = String(text)
+  const units = detectUnits(raw)
+  const scale = MM_PER[units]
+  const csv = allegroToCsv(raw) ?? whitespaceToCsv(raw) ?? raw
   const { headers, rows } = parseDelimited(csv, { headerAliases: PNP_COLS.ref })
   const col = Object.fromEntries(Object.entries(PNP_COLS).map(([k, a]) => [k, findColumn(headers, a)]))
   if (!col.ref || !col.x || !col.y) {
-    throw new BoardFileError(
-      `Pick-and-place file needs reference, X and Y columns. Found: ${headers.join(', ') || 'nothing'}.`,
-    )
+    throw new BoardFileError(`Pick-and-place file needs reference, X and Y columns. Found: ${headers.join(', ') || 'nothing'}.`)
   }
   const warnings = []
+  if (units !== 'mm') warnings.push(`Pick-and-place units: ${units}, converted to mm.`)
   const locations = {}
   rows.forEach((row, i) => {
     const ref = String(row[col.ref] ?? '').trim().toUpperCase()
@@ -98,11 +147,33 @@ export function parsePnp(text) {
       return
     }
     const rot = col.rot ? parseNumber(row[col.rot]) : 0
-    const sideRaw = String(row[col.side] ?? 'top').toLowerCase()
-    const side = /^b|bottom|bot/.test(sideRaw) ? 'bottom' : 'top'
-    locations[ref] = { x, y, rot: Number.isNaN(rot) ? 0 : ((rot % 360) + 360) % 360, side }
+    const sideRaw = String(row[col.side] ?? '').trim().toLowerCase()
+    const side = /^(b|bot|bottom|m|mirror|yes|y|true)/.test(sideRaw) ? 'bottom' : 'top'
+    locations[ref] = {
+      x: x * scale,
+      y: y * scale,
+      rot: Number.isNaN(rot) ? 0 : ((rot % 360) + 360) % 360,
+      side,
+      pkg: col.pkg ? String(row[col.pkg] ?? '').trim() : '',
+      val: col.val ? String(row[col.val] ?? '').trim() : '',
+    }
   })
-  return { locations, warnings }
+  if (!Object.keys(locations).length) throw new BoardFileError('The pick-and-place file has no rows with positions.')
+  return { locations, units, warnings }
+}
+
+/** Without a BOM: one part per placement row, value and package from the placement file. */
+export function bomFromPnp(pnp) {
+  const rows = Object.entries(pnp.locations).map(([ref, l]) => ({
+    refs: [ref],
+    value: l.val || l.pkg || '',
+    footprint: l.pkg || '',
+    qty: 1,
+    spares: 0,
+    dnp: false,
+    polarized: null,
+  }))
+  return { rows, warnings: ['No BOM: parts, values and packages come from the placement file.'], hasSparesColumn: false }
 }
 
 function hashString(s) {
@@ -115,7 +186,7 @@ function hashString(s) {
  * Build the board model from parsed BOM rows and optional PnP locations.
  * Parts with identical value + footprint share a group so they are placed together.
  */
-export function buildBoard({ name, source, bom, pnp }) {
+export function buildBoard({ name, source, bom, pnp, pads = null }) {
   const warnings = [...bom.warnings, ...(pnp?.warnings ?? [])]
   const parts = {}
   const groups = []
@@ -141,14 +212,16 @@ export function buildBoard({ name, source, bom, pnp }) {
         continue
       }
       group.refs.push(ref)
+      const footprint = row.footprint || pnp?.locations?.[ref]?.pkg || ''
       parts[ref] = {
         ref,
         value: row.value,
-        footprint: row.footprint,
-        size: describeFootprint(row.footprint),
-        polarity: detectPolarity({ ref, footprint: row.footprint, override: row.polarized }),
+        footprint,
+        size: describeFootprint(footprint),
+        polarity: detectPolarity({ ref, footprint, override: row.polarized }),
         group: group.id,
         loc: pnp?.locations?.[ref] ?? null,
+        pads: pads?.[ref] ?? null,
       }
     }
   }
@@ -181,16 +254,10 @@ export function defaultSequence(board) {
   return board.groups.flatMap((g) => g.refs)
 }
 
-export function loadBoardFromText({ name, source = 'upload', bomText, pnpText }) {
+export function loadBoardFromText({ name, source = 'upload', bomText, pnpText, pads = null }) {
   for (const [label, t] of [['BOM', bomText], ['pick-and-place', pnpText]]) {
     const kind = t ? looksBinary(t) : null
     if (kind) throw new BoardFileError(`The ${label} file looks like ${kind}. Export or "Save as" CSV (comma-separated) and load that instead.`)
-  }
-  let bom
-  try {
-    bom = parseBom(bomText)
-  } catch (e) {
-    throw new BoardFileError(`BOM file: ${e.message}`)
   }
   let pnp = null
   try {
@@ -198,5 +265,12 @@ export function loadBoardFromText({ name, source = 'upload', bomText, pnpText })
   } catch (e) {
     throw new BoardFileError(`Pick-and-place file: ${e.message}`)
   }
-  return buildBoard({ name, source, bom, pnp })
+  let bom
+  try {
+    bom = bomText ? parseBom(bomText) : pnp ? bomFromPnp(pnp) : null
+  } catch (e) {
+    throw new BoardFileError(`BOM file: ${e.message}`)
+  }
+  if (!bom) throw new BoardFileError('BOM file: add a BOM or a placement file.')
+  return buildBoard({ name, source, bom, pnp, pads })
 }

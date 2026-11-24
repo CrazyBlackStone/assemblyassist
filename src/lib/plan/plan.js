@@ -1,4 +1,5 @@
 import { refPrefix, compareRefs } from '../bom/refs.js'
+import { packageGeometry } from '../bom/packages.js'
 
 // The build order: categories of parts, each draggable as a unit, parts draggable within
 // and between them. The default comes from fixed rules (never labeled AI).
@@ -32,19 +33,63 @@ export function orderWithinCategory(board, refs) {
   })
 }
 
+export const sideOf = (board, ref) => (board.parts[ref]?.loc?.side === 'bottom' ? 'bottom' : 'top')
+export const SIDE_NAME = { top: 'Front', bottom: 'Back' }
+
+/**
+ * Which side to build first. The back goes first only when it holds nothing but low SMD
+ * parts and the front has something tall, so the board lies flat while the back is done.
+ */
+export function defaultSideOrder(board) {
+  const parts = Object.values(board.parts)
+  const back = parts.filter((p) => p.loc?.side === 'bottom')
+  if (!back.length) return ['top', 'bottom']
+  const tall = (p) => {
+    const g = packageGeometry(p)
+    return g.tht || g.height > 2
+  }
+  const front = parts.filter((p) => p.loc?.side !== 'bottom')
+  return !back.some(tall) && front.some(tall) ? ['bottom', 'top'] : ['top', 'bottom']
+}
+
 export function defaultPlan(board) {
-  const buckets = new Map(RULES.map((r) => [r.id, []]))
-  for (const group of board.groups) {
-    for (const ref of group.refs) {
-      const part = board.parts[ref]
-      const rule = RULES.find((r) => r.priority && r.test(part)) ?? RULES.find((r) => r.test(part))
-      buckets.get(rule.id).push(ref)
+  const sides = defaultSideOrder(board)
+  const categories = []
+  for (const side of sides) {
+    const buckets = new Map(RULES.map((r) => [r.id, []]))
+    for (const group of board.groups) {
+      for (const ref of group.refs) {
+        if (sideOf(board, ref) !== side) continue
+        const part = board.parts[ref]
+        const rule = RULES.find((r) => r.priority && r.test(part)) ?? RULES.find((r) => r.test(part))
+        buckets.get(rule.id).push(ref)
+      }
+    }
+    ORDER.map((id) => RULES.find((r) => r.id === id))
+      .filter((r) => buckets.get(r.id).length)
+      .forEach((r) => categories.push({ id: `cat_${side}_${r.id}`, name: r.name, reason: r.reason, refs: orderWithinCategory(board, buckets.get(r.id)), side }))
+  }
+  return { source: 'default', sides, categories }
+}
+
+/** Split any category that mixes sides, and keep categories grouped in side order. */
+export function enforceSides(board, plan) {
+  const sides = plan.sides ?? defaultSideOrder(board)
+  const split = []
+  for (const c of plan.categories) {
+    for (const side of ['top', 'bottom']) {
+      const refs = c.refs.filter((r) => sideOf(board, r) === side)
+      if (!refs.length) continue
+      const whole = refs.length === c.refs.length
+      split.push({ ...c, id: whole ? c.id : `${c.id}_${side}`, refs, side })
     }
   }
-  const categories = ORDER.map((id) => RULES.find((r) => r.id === id))
-    .filter((r) => buckets.get(r.id).length)
-    .map((r) => ({ id: `cat_${r.id}`, name: r.name, reason: r.reason, refs: orderWithinCategory(board, buckets.get(r.id)) }))
-  return { source: 'default', categories }
+  const ordered = sides.flatMap((side) => split.filter((c) => c.side === side))
+  return { ...plan, sides, categories: ordered }
+}
+
+export function swapSides(board, plan) {
+  return enforceSides(board, { ...plan, sides: [...(plan.sides ?? defaultSideOrder(board))].reverse() })
 }
 
 const uid = () => Math.random().toString(36).slice(2, 7)
@@ -80,7 +125,10 @@ export function validatePlan(board, categories, source) {
     issues.push(`The plan left out ${missing.join(', ')}. Added them at the end.`)
     clean.push({ id: `cat_rest_${uid()}`, name: 'Remaining', reason: '', refs: orderWithinCategory(board, missing), appAdded: true })
   }
-  return clean.length ? { plan: { source, categories: clean }, issues } : { plan: null, issues }
+  if (!clean.length) return { plan: null, issues }
+  const mixed = clean.filter((c) => new Set(c.refs.map((r) => sideOf(board, r))).size > 1)
+  if (mixed.length) issues.push(`Split ${mixed.map((c) => `"${c.name}"`).join(', ')} into front and back.`)
+  return { plan: enforceSides(board, { source, categories: clean }), issues }
 }
 
 export const sequenceOf = (plan) => (plan ? plan.categories.flatMap((c) => c.refs) : [])
@@ -88,6 +136,9 @@ export const categoryOf = (plan, ref) => plan?.categories.find((c) => c.refs.inc
 
 /** Move refs to just after `afterRef` (or to the end), keeping them in the category of their new neighbour. */
 export function moveRefs(plan, refs, afterRef) {
+  const anchorSide = plan.categories.find((c) => c.refs.includes(afterRef))?.side
+  if (anchorSide) refs = refs.filter((r) => (plan.categories.find((c) => c.refs.includes(r))?.side ?? anchorSide) === anchorSide)
+  if (!refs.length) return plan
   const moving = new Set(refs)
   const cats = plan.categories.map((c) => ({ ...c, refs: c.refs.filter((r) => !moving.has(r)) }))
   if (afterRef && !moving.has(afterRef)) {
@@ -97,7 +148,8 @@ export function moveRefs(plan, refs, afterRef) {
       return { ...plan, categories: cats.filter((c) => c.refs.length), reordered: true }
     }
   }
-  const last = cats[cats.length - 1]
+  const side = plan.categories.find((c) => c.refs.includes(refs[0]))?.side
+  const last = [...cats].reverse().find((c) => !side || c.side === side) ?? cats[cats.length - 1]
   last.refs.push(...refs)
   return { ...plan, categories: cats.filter((c) => c.refs.length), reordered: true }
 }
@@ -108,7 +160,9 @@ export function moveCategory(plan, catId, afterRef) {
   const i = cats.findIndex((c) => c.id === catId)
   if (i < 0) return plan
   const [cat] = cats.splice(i, 1)
-  const j = afterRef ? cats.findIndex((c) => c.refs.includes(afterRef)) : -1
+  const anchor = afterRef ? cats.find((c) => c.refs.includes(afterRef)) : null
+  if (anchor && anchor.side && cat.side && anchor.side !== cat.side) return plan
+  const j = anchor ? cats.indexOf(anchor) : -1
   cats.splice(j >= 0 ? j + 1 : cats.length, 0, cat)
   return { ...plan, categories: cats, reordered: true }
 }

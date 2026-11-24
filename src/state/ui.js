@@ -12,6 +12,8 @@ export const ui = createStore({
     check: null, // { ref, status: 'capturing'|'checking'|'done'|'error', result, error }
     review: null, // { status, items: [{ ref, status, result }], activeRef }
     logOpen: false,
+    viewCmd: null, // { type: 'zoom-in'|'zoom-out'|'fit'|'focus', ref, nonce }
+    viewSide: null, // null = follow the current part's side
     toast: null,
   },
 })

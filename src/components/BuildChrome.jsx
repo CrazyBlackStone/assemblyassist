@@ -16,6 +16,7 @@ import { Icon, AiBadge, MarkWrong } from './ui.jsx'
 /** Collapsed: a thin bar of ref des in build order. Tap to open the full draggable list. */
 export function BomRail({ project }) {
   const open = useStore(ui, (s) => s.railOpen)
+  const twoSided = new Set(project.plan.categories.map((c) => c.side ?? 'top')).size > 1
   const curRef = useRef(null)
   useEffect(() => {
     curRef.current?.scrollIntoView({ block: 'center', behavior: 'smooth' })
@@ -25,7 +26,8 @@ export function BomRail({ project }) {
       <nav className="rail glass" onClick={() => setUi({ railOpen: true })} aria-label="Build order (tap to edit)">
         {project.plan.categories.map((c, ci) => (
           <div key={c.id} style={{ display: 'contents' }}>
-            {ci > 0 && <span className="gap" />}
+            {twoSided && (ci === 0 || project.plan.categories[ci - 1].side !== c.side) && <span className="side-tag">{c.side === 'bottom' ? 'BACK' : 'FRONT'}</span>}
+            {ci > 0 && project.plan.categories[ci - 1].side === c.side && <span className="gap" />}
             {c.refs.map((r) => (
               <span key={r} ref={r === project.current ? curRef : undefined} className={`r ${r === project.current ? 'cur' : (project.status[r] ?? '')}`}>
                 {r}
@@ -53,6 +55,7 @@ export function BomRail({ project }) {
               verifications={project.verifications}
               onChange={(plan) => dispatch({ type: 'set-plan', plan })}
               onPick={(ref) => dispatch({ type: 'jump', ref })}
+              onSwapSides={() => dispatch({ type: 'swap-sides' })}
             />
           </aside>
         </>

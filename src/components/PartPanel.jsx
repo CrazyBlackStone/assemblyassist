@@ -1,6 +1,7 @@
 import { packageGeometry } from '../lib/bom/packages.js'
 import { PartGlyph, orientationLabel } from './PartGlyph.jsx'
 import { nextAfterCurrent, progress } from '../state/projects.js'
+import { SIDE_NAME } from '../lib/plan/plan.js'
 import { runCommand } from '../lib/voice/controller.js'
 import { runReview } from '../lib/verify/flow.js'
 import { Icon } from './ui.jsx'
@@ -37,17 +38,22 @@ export function PartPanel({ project }) {
 
   const g = packageGeometry(part)
   const rot = part.loc?.rot ?? 0
-  const label = orientationLabel(g, rot, settings.viewRotation ?? 0)
+  const side = part.loc?.side === 'bottom' ? 'bottom' : 'top'
+  const label = orientationLabel(g, rot, settings.viewRotation ?? 0, side)
+  const twoSided = project.plan.sides?.length === 2 && project.plan.categories.some((c) => c.side === 'bottom') && project.plan.categories.some((c) => c.side === 'top')
+  const prev = project.history.length ? board.parts[/^(\S+) placed$/.exec(project.history[project.history.length - 1].label)?.[1]] : null
+  const flipped = twoSided && prev?.loc && (prev.loc.side === 'bottom') !== (side === 'bottom')
 
   return (
     <section className="panel p1 glass" aria-label="Current part">
       <div>
         <div className="ref">{part.ref}</div>
         <div className="val">{part.value || '—'}</div>
-        <div className="pkg">{part.size.code}</div>
+        {part.size.code && part.size.code !== part.value && <div className="pkg">{part.size.code}</div>}
       </div>
+      {twoSided && (flipped ? <div className="flip-note"><Icon name="flip" /> Flip to the {SIDE_NAME[side].toLowerCase()}</div> : <span className="chip side">{SIDE_NAME[side]}</span>)}
       <div className="glyph-stage">
-        <PartGlyph part={part} g={g} rot={rot} viewRotation={settings.viewRotation ?? 0} />
+        <PartGlyph part={part} g={g} rot={rot} viewRotation={settings.viewRotation ?? 0} side={side} />
       </div>
       {label ? (
         <div className="orient">

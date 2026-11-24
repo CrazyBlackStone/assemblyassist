@@ -3,7 +3,7 @@ import { parseCommand, HELP_TEXT } from './grammar.js'
 import { speak, sayRef, getLastSpoken, listen, canRecognize } from './speech.js'
 import { createRecorder } from './recorder.js'
 import { transcribe, sttEngine } from './stt.js'
-import { project, dispatch, STATUS, nextAfterCurrent } from '../../state/projects.js'
+import { project, dispatch, STATUS, nextAfterCurrent, currentSide } from '../../state/projects.js'
 import { setUi, ui } from '../../state/ui.js'
 import { describeLocation } from '../geometry/board.js'
 import { runTask, taskConfig } from '../ai/provider.js'
@@ -58,8 +58,11 @@ export function execute(cmd) {
     case 'placed': {
       const ref = placeCurrent()
       if (!ref) return 'Everything is placed.'
-      const n = project.get().current
-      return n ? `Next: ${describe(project.get(), n)}.` : 'That was the last part. Say review to check them all.'
+      const q = project.get()
+      const n = q.current
+      if (!n) return 'That was the last part. Say review to check them all.'
+      const flip = (q.board.parts[ref].loc?.side === 'bottom') !== (q.board.parts[n].loc?.side === 'bottom')
+      return `${flip ? `Flip the board to the ${q.board.parts[n].loc?.side === 'bottom' ? 'back' : 'front'}. ` : ''}Next: ${describe(q, n)}.`
     }
     case 'skip': {
       const ref = cmd.ref ?? p.current
@@ -89,7 +92,7 @@ export function execute(cmd) {
       return `${cat.name} next.`
     }
     case 'where': {
-      setUi({ highlightRef: cmd.ref })
+      setUi({ highlightRef: cmd.ref, viewSide: p.board.parts[cmd.ref]?.loc?.side === 'bottom' ? 'bottom' : 'top' })
       setTimeout(() => ui.get().highlightRef === cmd.ref && setUi({ highlightRef: null }), 6000)
       return describeLocation(p.board, cmd.ref).replace(cmd.ref, sayRef(cmd.ref))
     }
@@ -112,6 +115,22 @@ export function execute(cmd) {
     case 'review':
       runReview()
       return 'Reviewing every placed part.'
+    case 'view': {
+      setUi({ viewCmd: { type: cmd.view, ref: cmd.ref ?? null, nonce: Date.now() } })
+      return { 'zoom-in': 'Zooming in.', 'zoom-out': 'Zooming out.', fit: 'Whole board.', focus: `Zooming on ${sayRef(cmd.ref ?? '')}.` }[cmd.view]
+    }
+    case 'view-side': {
+      const now = ui.get().viewSide ?? currentSide(p)
+      const side = cmd.side === 'toggle' ? (now === 'top' ? 'bottom' : 'top') : cmd.side
+      setUi({ viewSide: side })
+      return side === 'bottom' ? 'Showing the back.' : 'Showing the front.'
+    }
+    case 'side-first': {
+      if (!p.plan.categories.some((c) => c.side === cmd.side)) return `Nothing on the ${cmd.side === 'bottom' ? 'back' : 'front'}.`
+      if (p.plan.sides?.[0] === cmd.side) return 'That side is already first.'
+      dispatch({ type: 'swap-sides' })
+      return `${cmd.side === 'bottom' ? 'Back' : 'Front'} first. ${describe(project.get(), project.get().current)}.`
+    }
     case 'repeat':
       return getLastSpoken() || 'Nothing to repeat.'
     case 'help':

@@ -68,7 +68,7 @@ describe('board loading', () => {
   it('reads KiCad ASCII .pos files', () => {
     const pos = `### Module positions\n## Unit = mm, Angle = deg.\n# Ref     Val       Package          PosX       PosY       Rot  Side\nC1        100nF     C_0805           10.0000    -5.0000    90.0000  top\nU1        LM358     SOIC-8           20.0000    -8.5000   180.0000  bottom\n## End\n`
     const { locations } = parsePnp(pos)
-    expect(locations.C1).toEqual({ x: 10, y: -5, rot: 90, side: 'top' })
+    expect(locations.C1).toMatchObject({ x: 10, y: -5, rot: 90, side: 'top', pkg: 'C_0805', val: '100nF' })
     expect(locations.U1.side).toBe('bottom')
   })
   it('warns about PnP mismatches', () => {

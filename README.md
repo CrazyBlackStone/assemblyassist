@@ -23,18 +23,41 @@ npm test
 ## Screens
 
 - **Workspace**: your projects, each with a board thumbnail and progress. Projects are stored in the browser (IndexedDB).
-- **Setup**: upload Gerber (.zip or files), BOM and CPL; turn the soldering check off for solder paste; choose camera and microphone; pair the phone by QR code; drag the BOM into the order you want, or ask for a suggested order.
+- **Setup**: drop the fabrication zip (or loose files) from any EDA tool, plus the CPL and an optional BOM; turn the soldering check off for solder paste; choose camera and microphone; pair the phone by QR code; drag the BOM into the order you want (front and back are ordered separately), or ask for a suggested order.
 - **Build**:
   - **Left rail**: the build order as ref des. Tap it to open the full list, where parts and whole categories can be dragged.
   - **Panel 1**: the current part with a drawing of its package as it sits on the board, the pin-1 or polarity mark lit, the next part, and Back / Skip / Next.
-  - **Panel 2**: the board rendered from the Gerbers. Placed parts appear on it, and the current part hovers and lands when placed.
+  - **Panel 2**: the board in 3D, textured from the Gerbers, with every placed part as a model at its real size. The current part hovers and lands when placed, and the view flips to the back for back-side parts. Zoom with scroll or pinch, pan by dragging, tilt with a right-drag or two fingers, double-tap a part to zoom on it, or use the + / − / fit / flip buttons.
   - **Panel 3**: the phone camera. After **Next**, it blurs and shows the cropped part with the AI's orientation and solder verdict.
   - **Bottom bar**: what was heard, what the app answers, and a soldering tip for the current package.
   - **Done** (top right): re-checks every placed part from one photo, lighting each up on the board in turn.
 
 Keyboard (works with a USB foot pedal): `Space` next · `S` skip · `Z` back · `K` check · `Y` confirm · hold `T` to talk.
 
-Voice: *next, skip, back, C8 next, capacitors next, go to U2, where is C8, check, looks good, review*. Anything else, such as *"do the resistors before the LEDs"* or *"how do I fix a bridge?"*, goes to the language model, which can only act on parts and categories that exist on the board.
+Voice: *next, skip, back, C8 next, capacitors next, go to U2, where is C8, zoom in, zoom on C8, show the back, do the back first, check, looks good, review*. Anything else, such as *"do the resistors before the LEDs"* or *"how do I fix a bridge?"*, goes to the language model, which can only act on parts and categories that exist on the board.
+
+## Supported files
+
+| What | Formats |
+| --- | --- |
+| Gerbers | Any RS-274X/X2 set: KiCad, Altium/Protel (.GTL, .GBO, .GM1 …), Cadence Allegro/OrCAD (.art), Eagle (.cmp, .sol …). Layers are identified from the file's own header (Gerber X2 attributes, Allegro layer records) before the file name. Excellon drill files in any extension (.drl, .txt, .xln). Rout paths, inner layers, assembly and drill drawings are recognised and left out. |
+| Placement (CPL) | KiCad .pos (CSV or ASCII), Altium pick-and-place (CSV or text), Allegro `place_txt`, JLCPCB CPL, generic CSV. Units mm, mil or inch. Bottom side from Layer/Side/TB or Allegro "mirror". |
+| BOM | Optional. KiCad, Altium, JLCPCB or generic CSV. Without one, parts and packages come from the placement file. |
+| Netlist | Optional IPC-D-356 (.ipc): gives the real pad layout of every part, used to size parts the package library doesn't know (connectors, modules). |
+
+A fab zip can carry all of these; the app sorts them into the right slots.
+
+## 3D models
+
+Each part is drawn at its real size:
+- **Chip resistors and capacitors:** every EIA size from 008004 to 2920 (imperial or metric codes). Capacitor thickness follows the value; for example an 0805 is 0.6 mm at 1 nF and 1.25 mm at 10 µF.
+- **Tantalum and electrolytic capacitors:** tantalum case letters and EIA codes, and electrolytics by diameter and height.
+- **Through-hole parts:** axial, disc, film-box and radial parts.
+- **IPC-7351 footprint names:** names such as `RESC1608X55N` or `SOIC127P600X175-8N` encode the dimensions directly.
+- **ICs and connectors:** SOIC, TSSOP, QFN, QFP, SOT and the usual connectors.
+- **Unknown packages:** sized from the netlist's pads.
+
+Footprints named `Library:Footprint` (KiCad) also load the real KiCad 3D model from the KiCad library (CC-BY-SA 4.0), served by jsDelivr. When there's no match, the built-in dimensioned model stays.
 
 ## AI
 
@@ -75,6 +98,8 @@ OPENROUTER_API_KEY=sk-or-... npm run eval:vision
 It reports verdict accuracy, orientation accuracy, missed flips and problems, false alarms and the can't-tell rate.
 
 - `scripts/make-demo-gerbers.mjs` regenerates the demo board's Gerbers from its BOM/CPL.
+
+Package dimensions live in `src/lib/bom/packages.js` (`CHIP_SIZES`, the height tables, `ipc7351`).
 
 ## Deploy
 

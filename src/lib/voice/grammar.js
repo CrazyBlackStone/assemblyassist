@@ -128,6 +128,17 @@ export function parseCommand(transcript, board, plan = null) {
   const ref = board ? findRef(t, refs) : null
   const words = t.split(' ')
 
+  // Board view (before "back", which alone means undo).
+  if (has(t, 'zoom', 'magnify', 'closer')) {
+    if (ref) return { type: 'view', view: 'focus', ref }
+    return { type: 'view', view: has(t, 'out', 'away') ? 'zoom-out' : 'zoom-in' }
+  }
+  if (/\b(whole|entire|full) board\b|\bfit\b|\bzoom out all\b/.test(t)) return { type: 'view', view: 'fit' }
+  if (/\bflip (the )?(view|board view)\b|\bturn (it )?over\b/.test(t)) return { type: 'view-side', side: 'toggle' }
+  if (/\b(show|view|see) (the )?(back|bottom)\b/.test(t)) return { type: 'view-side', side: 'bottom' }
+  if (/\b(show|view|see) (the )?(front|top)\b/.test(t)) return { type: 'view-side', side: 'top' }
+  if (/\b(back|bottom) (side )?(first|next)\b|\bdo the (back|bottom)\b/.test(t)) return { type: 'side-first', side: 'bottom' }
+  if (/\b(front|top) (side )?(first|next)\b|\bdo the (front|top)\b/.test(t)) return { type: 'side-first', side: 'top' }
   if (has(t, 'where')) {
     if (ref) return { type: 'where', ref }
     const groups = board ? findValueGroups(t, board.groups) : []
@@ -159,4 +170,4 @@ export function parseCommand(transcript, board, plan = null) {
   return { type: 'unknown' }
 }
 
-export const HELP_TEXT = 'Say next, skip, back, C8 next, capacitors next, where is C8, check, confirm, or ask a question.'
+export const HELP_TEXT = 'Say next, skip, back, C8 next, capacitors next, where is C8, zoom in, show the back, check, confirm, or ask a question.'

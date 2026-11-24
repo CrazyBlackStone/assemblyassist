@@ -1,6 +1,6 @@
 import { createStore as idbStore, get, set, del } from 'idb-keyval'
 import { createStore, uid } from '../lib/store.js'
-import { defaultPlan, sequenceOf, moveRefs, moveCategory, categoryOf } from '../lib/plan/plan.js'
+import { defaultPlan, sequenceOf, moveRefs, moveCategory, categoryOf, enforceSides, swapSides, sideOf } from '../lib/plan/plan.js'
 
 // Projects live in IndexedDB (Gerber files are too big for localStorage). The open
 // project is mirrored in a store and saved shortly after every change.
@@ -92,9 +92,18 @@ project.subscribe(() => {
   saveTimer = setTimeout(() => saveProject(p), 300)
 })
 
+/** Bring projects saved by older versions up to date. */
+function migrate(p) {
+  if (!p) return p
+  let out = p
+  if (out.board && out.plan && !out.plan.sides) out = { ...out, plan: enforceSides(out.board, out.plan) }
+  if (out.calibration?.a) out = { ...out, calibration: { top: out.calibration } }
+  return out
+}
+
 export async function openProject(id) {
   if (project.get()?.id === id) return project.get()
-  const p = await readProject(id)
+  const p = migrate(await readProject(id))
   project.set(p)
   return p
 }
@@ -108,6 +117,10 @@ function withHistory(p, label) {
 }
 
 const pending = (status, ref) => !status[ref]
+
+/** The side the current part is on (where the board should be facing up). */
+export const currentSide = (p) => (p?.board && p.current ? sideOf(p.board, p.current) : (p?.plan?.sides?.[0] ?? 'top'))
+export const calibrationFor = (p, side) => (p?.calibration?.a ? (side === 'top' ? p.calibration : null) : (p?.calibration?.[side] ?? null))
 
 /** Next part still to place after `fromRef`, wrapping around; null when all are handled. */
 export function nextPending(sequence, status, fromRef) {
@@ -135,9 +148,17 @@ export function projectReducer(p0, action) {
     case 'setting':
       return { ...p, settings: { ...p.settings, [action.key]: action.value } }
     case 'set-plan': {
-      const seq = sequenceOf(action.plan)
+      const plan = p.board ? enforceSides(p.board, action.plan) : action.plan
+      const seq = sequenceOf(plan)
       const current = p.current && seq.includes(p.current) && pending(p.status, p.current) ? p.current : (seq.find((r) => pending(p.status, r)) ?? null)
-      return { ...withHistory(p, 'reorder'), plan: action.plan, current }
+      return { ...withHistory(p, 'reorder'), plan, current }
+    }
+    case 'swap-sides': {
+      const plan = swapSides(p.board, p.plan)
+      const first = plan.sides[0]
+      const seq = sequenceOf(plan)
+      const current = seq.find((r) => pending(p.status, r) && sideOf(p.board, r) === first) ?? p.current
+      return { ...withHistory(p, 'sides swapped'), plan, current }
     }
     case 'move-next': {
       // Put refs right after the current part and make the first of them next.
@@ -167,7 +188,7 @@ export function projectReducer(p0, action) {
     case 'verification':
       return { ...p, verifications: { ...p.verifications, [action.ref]: { ...p.verifications[action.ref], ...action.result, at: Date.now() } } }
     case 'calibration':
-      return { ...p, calibration: action.calibration }
+      return { ...p, calibration: { ...(p.calibration?.a ? { top: p.calibration } : p.calibration), [action.side ?? 'top']: action.calibration } }
     case 'reset-progress':
       return { ...p, status: {}, history: [], verifications: {}, current: sequenceOf(p.plan)[0] ?? null }
     default:
