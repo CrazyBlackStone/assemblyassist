@@ -1,6 +1,6 @@
 import Peer from 'peerjs'
 import { createStore } from '../store.js'
-import { prefs } from '../../state/settings.js'
+import { PAIRING } from '../../config/ai.js'
 
 // Phone <-> laptop link over WebRTC (PeerJS).
 //  - Signaling: PeerJS public cloud by default, or your own PeerServer (e.g. on EC2) via Settings.
@@ -27,17 +27,8 @@ function newCode() {
 }
 
 function peerOptions() {
-  const p = prefs.get()
-  let iceServers
-  try {
-    iceServers = JSON.parse(p.iceServers)
-  } catch {
-    iceServers = undefined
-  }
-  const opts = { config: iceServers ? { iceServers } : undefined, debug: 1 }
-  if (p.peerHost) {
-    Object.assign(opts, { host: p.peerHost, port: Number(p.peerPort) || 443, path: p.peerPath || '/', secure: Number(p.peerPort) !== 80 })
-  }
+  const opts = { config: { iceServers: PAIRING.iceServers }, debug: 1 }
+  if (PAIRING.peerHost) Object.assign(opts, { host: PAIRING.peerHost, port: PAIRING.peerPort, path: PAIRING.peerPath, secure: PAIRING.peerPort !== 80 })
   return opts
 }
 
@@ -54,7 +45,7 @@ function watchIce(pc, onFail) {
 }
 
 const ICE_FAIL =
-  'The phone and laptop found each other but could not connect directly. Campus or guest Wi-Fi often blocks this. Try a phone hotspot, or add a TURN relay server in Settings.'
+  'Phone and laptop can’t connect directly on this Wi-Fi. Use the phone’s hotspot.'
 
 // ============================ laptop (host) ============================
 
@@ -93,7 +84,10 @@ function openHost(code, attempt = 0) {
   peer.on('connection', (conn) => {
     host.conn?.close()
     host.conn = conn
-    conn.on('open', () => setP({ status: pairing.get().stream ? 'paired' : 'linked', error: null }))
+    conn.on('open', () => {
+      setP({ status: pairing.get().stream ? 'paired' : 'linked', error: null })
+      if (phoneConfig) conn.send({ type: 'config', ...phoneConfig })
+    })
     conn.on('data', (msg) => handleHostMessage(msg))
     conn.on('close', () => {
       if (host?.conn === conn) {
@@ -152,6 +146,13 @@ export function onPhoneMessage(fn) {
 
 export function sendToPhone(msg) {
   if (host?.conn?.open) host.conn.send(msg)
+}
+
+let phoneConfig = null
+/** Settings the phone needs (which device listens). Re-sent whenever the phone connects. */
+export function configurePhone(cfg) {
+  phoneConfig = cfg
+  sendToPhone({ type: 'config', ...cfg })
 }
 
 /** Ask the phone for a full-resolution still. Falls back to the video frame on timeout (caller decides). */

@@ -1,436 +1,277 @@
 import { useEffect, useState } from 'react'
 import QRCode from 'qrcode'
 import { useStore } from '../lib/store.js'
-import { session, progress } from '../state/session.js'
-import { prefs, keys, activeProvider, setKeyStorageMode, getKeyStorageMode, initialPrefs } from '../state/settings.js'
-import { PROVIDERS, DEFAULT_TASKS } from '../config/models.js'
-import { catalog, loadOpenRouterCatalog, autoPickModels, isFree, acceptsImages } from '../lib/ai/catalog.js'
-import { loadBoardFromText, BoardFileError } from '../lib/bom/board.js'
-import { demoBoardText } from '../data/demoBoard.js'
-import { pairing, startHost, resetHost, pairUrl } from '../lib/pairing/pairing.js'
-import { openLocalCamera, closeLocalCamera, camera } from '../lib/camera.js'
+import { project, dispatch, saveProject } from '../state/projects.js'
+import { pairing, pairUrl, startHost } from '../lib/pairing/pairing.js'
+import { collectGerbers } from '../lib/gerber/render.js'
+import { rebuild } from '../lib/projects/load.js'
+import { defaultPlan } from '../lib/plan/plan.js'
+import * as OrderPlan from '../lib/ai/tasks/orderPlan.js'
+import { useAiTask } from '../lib/ai/useAiTask.js'
+import { BoardView } from '../components/BoardView.jsx'
+import { BomList } from '../components/BomList.jsx'
+import { CostChip } from '../components/BuildChrome.jsx'
+import { Icon, AiBadge, MarkWrong, Switch, Seg } from '../components/ui.jsx'
 
-export function Setup({ navigate }) {
+const TILES = [
+  { key: 'gerber', label: 'Gerber', hint: '.zip or files', accept: '.zip,.gbr,.ger,.gtl,.gbl,.gto,.gbo,.gts,.gbs,.gtp,.gm1,.gko,.drl,.xln,.txt', multiple: true },
+  { key: 'bom', label: 'BOM', hint: '.csv', accept: '.csv,.tsv,.txt' },
+  { key: 'cpl', label: 'CPL', hint: 'pick-and-place .csv / .pos', accept: '.csv,.pos,.tsv,.txt' },
+]
+
+function DropTile({ tile, file, error, busy, onFiles }) {
+  const [over, setOver] = useState(false)
   return (
-    <main className="setup">
-      <h1>Setup</h1>
-      <PrivacyNote />
-      <BoardSection navigate={navigate} />
-      <CameraSection />
-      <AiSection />
-      <VoiceSection />
-    </main>
+    <label
+      className={`drop ${over ? 'over' : ''} ${file && !error ? 'done' : ''} ${error ? 'err' : ''}`}
+      onDragOver={(e) => (e.preventDefault(), setOver(true))}
+      onDragLeave={() => setOver(false)}
+      onDrop={(e) => {
+        e.preventDefault()
+        setOver(false)
+        onFiles([...e.dataTransfer.files])
+      }}
+    >
+      <input type="file" accept={tile.accept} multiple={tile.multiple} onChange={(e) => onFiles([...e.target.files])} />
+      {busy ? <div className="spinner" /> : <Icon name={file && !error ? 'check' : 'upload'} />}
+      <span className="big">{tile.label}</span>
+      <span className="file">{error ? <span className="err-text">{error}</span> : (file ?? tile.hint)}</span>
+    </label>
   )
 }
 
-function PrivacyNote() {
+export function Setup({ navigate }) {
+  const p = useStore(project)
+  const [errors, setErrors] = useState({})
+  const [notes, setNotes] = useState([])
+  const [busy, setBusy] = useState(null)
+
+  if (!p) return null
+  const s = p.settings
+
+  const onFiles = async (key, list) => {
+    if (!list.length) return
+    setBusy(key)
+    try {
+      let files = { ...p.files }
+      if (key === 'gerber') files.gerbers = await collectGerbers(list)
+      else files[key] = { name: list[0].name, text: await list[0].text() }
+      const hasProgress = Object.keys(p.status).length > 0
+      const bomChanged = key !== 'gerber'
+      if (bomChanged && hasProgress && !window.confirm('Replacing this file resets the build progress. Continue?')) return
+      const { project: next, errors: errs, notes: ns } = await rebuild({ ...p, files }, { bomChanged })
+      project.set(next)
+      await saveProject(next)
+      setErrors(errs)
+      setNotes(ns)
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  const fileLabel = { gerber: p.files.gerbers.length ? `${p.files.gerbers.length} files` : null, bom: p.files.bom?.name, cpl: p.files.cpl?.name }
+  const ready = Boolean(p.board && p.plan)
+
   return (
-    <div className="privacy">
-      <strong>Privacy:</strong> don’t point the camera at confidential designs. Photos stay in this browser tab and are discarded when you leave; only the cropped area of a check is
-      sent to the AI provider you choose. API keys are stored only in this browser.
+    <div>
+      <header className="topbar glass">
+        <button className="btn icon ghost" onClick={() => navigate('/')} aria-label="Projects">
+          <Icon name="back" />
+        </button>
+        <input
+          className="title"
+          value={p.name}
+          onChange={(e) => dispatch({ type: 'rename', name: e.target.value })}
+          aria-label="Project name"
+          style={{ background: 'transparent', border: 0, outline: 'none', minWidth: 0, flex: 1 }}
+        />
+        <CostChip />
+        <button className="btn primary" disabled={!ready} onClick={() => navigate(`/p/${p.id}/build`)}>
+          Start <Icon name="next" />
+        </button>
+      </header>
+
+      <main className="setup">
+        <div className="col">
+          <section className="section glass">
+            <h2>Files</h2>
+            <div className="drops">
+              {TILES.map((t) => (
+                <DropTile key={t.key} tile={t} file={fileLabel[t.key]} error={errors[t.key]} busy={busy === t.key} onFiles={(l) => onFiles(t.key, l)} />
+              ))}
+            </div>
+            {p.render && (
+              <div className="preview" style={{ position: 'relative' }}>
+                <BoardView project={{ ...p, current: null }} />
+              </div>
+            )}
+            {p.board && (
+              <div className="stats">
+                <span className="chip">{Object.keys(p.board.parts).length} parts</span>
+                {p.render && (
+                  <span className="chip">
+                    {p.render.size.w.toFixed(0)} × {p.render.size.h.toFixed(0)} mm
+                  </span>
+                )}
+                {p.render?.layers?.length > 0 && <span className="chip">{p.render.layers.length} layers</span>}
+                {p.board.excluded.length > 0 && <span className="chip">{p.board.excluded.length} DNP</span>}
+                {!p.render?.svg && <span className="chip">No Gerber: outline from parts</span>}
+              </div>
+            )}
+            {notes.length > 0 && (
+              <details className="note">
+                <summary>{notes.length} note{notes.length > 1 ? 's' : ''}</summary>
+                <ul>
+                  {notes.map((n, i) => (
+                    <li key={i}>{n}</li>
+                  ))}
+                </ul>
+              </details>
+            )}
+          </section>
+
+          <section className="section glass">
+            <div className="option">
+              <div>
+                <div className="label">Check soldering</div>
+                <div className="sub">Turn off when using solder paste</div>
+              </div>
+              <Switch checked={s.verifySoldering} onChange={(v) => dispatch({ type: 'setting', key: 'verifySoldering', value: v })} label="Check soldering" />
+            </div>
+            <div className="option">
+              <div className="label">Camera</div>
+              <Seg value={s.cameraSource} options={[['phone', 'Phone'], ['local', 'This device']]} onChange={(v) => dispatch({ type: 'setting', key: 'cameraSource', value: v })} />
+            </div>
+            <div className="option">
+              <div className="label">Microphone</div>
+              <Seg value={s.micSource} options={[['laptop', 'Laptop'], ['phone', 'Phone']]} onChange={(v) => dispatch({ type: 'setting', key: 'micSource', value: v })} />
+            </div>
+            <div className="option">
+              <div>
+                <div className="label">Board orientation</div>
+                <div className="sub">Match how the board sits in front of you</div>
+              </div>
+              <button className="btn" onClick={() => dispatch({ type: 'setting', key: 'viewRotation', value: ((s.viewRotation ?? 0) + 90) % 360 })}>
+                <Icon name="rotate" /> {s.viewRotation ?? 0}°
+              </button>
+            </div>
+          </section>
+
+          {s.cameraSource === 'phone' && <PhonePair />}
+        </div>
+
+        <div className="col">
+          <OrderSection p={p} />
+        </div>
+      </main>
     </div>
   )
 }
 
-function BoardSection({ navigate }) {
-  const s = useStore(session)
-  const [bomFile, setBomFile] = useState(null)
-  const [pnpFile, setPnpFile] = useState(null)
-  const [name, setName] = useState('')
-  const [error, setError] = useState(null)
-  const [warnings, setWarnings] = useState([])
-  const [loaded, setLoaded] = useState(null) // summary of the last uploaded board
-  const [busy, setBusy] = useState(false)
-
-  const hasProgress = s.board && progress(s).placed + progress(s).skipped > 0
-  const confirmReplace = () => !hasProgress || window.confirm(`Replace “${s.board.name}”? Its progress (${progress(s).placed} placed) will be cleared.`)
-
-  const load = (board) => {
-    session.dispatch({ type: 'load-board', board })
-    setWarnings(board.warnings)
-    setError(null)
-  }
-
-  const summary = (b) =>
-    `${Object.keys(b.parts).length} parts in ${b.groups.length} value groups, ${b.hasLocations ? 'with locations' : 'no locations'}${b.excluded.length ? `, ${b.excluded.length} DNP excluded` : ''}`
-
-  const loadDemo = () => {
-    if (!confirmReplace()) return
-    load(loadBoardFromText({ ...demoBoardText, source: 'demo' }))
-    navigate('/build')
-  }
-
-  const loadFiles = async () => {
-    setLoaded(null)
-    setWarnings([])
-    if (!bomFile) return setError('Choose a BOM file first (the first file box).')
-    if (!confirmReplace()) return
-    setBusy(true)
-    try {
-      const bomText = await bomFile.text()
-      const pnpText = pnpFile ? await pnpFile.text() : null
-      const board = loadBoardFromText({ name: name || bomFile.name.replace(/\.[^.]+$/, ''), bomText, pnpText })
-      load(board)
-      setLoaded({ name: board.name, text: summary(board) })
-    } catch (e) {
-      setError(e instanceof BoardFileError ? e.message : `Could not read the files: ${e.message}`)
-    } finally {
-      setBusy(false)
-    }
-  }
-
+function PhonePair() {
+  const pair = useStore(pairing)
+  const [qr, setQr] = useState(null)
+  useEffect(() => {
+    startHost()
+  }, [])
+  const url = pair.code ? pairUrl(pair.code) : null
+  useEffect(() => {
+    if (url) QRCode.toDataURL(url, { margin: 1, width: 300 }).then(setQr)
+  }, [url])
+  const ok = pair.status === 'paired'
   return (
-    <section className="card">
-      <h2>1. Board</h2>
-      {s.board ? (
-        <p>
-          Loaded: <strong>{s.board.name}</strong> ({Object.keys(s.board.parts).length} parts, {s.board.groups.length} value groups
-          {s.board.hasLocations ? ', with locations' : ', no locations'}
-          {s.board.excluded.length ? `; ${s.board.excluded.length} DNP excluded` : ''}).{' '}
-          <a href="#/build">Continue building →</a>
-        </p>
-      ) : (
-        <p>No board loaded yet.</p>
-      )}
-      <div className="row">
-        <button className="btn primary big" onClick={loadDemo}>
-          Use the demo board
-        </button>
-        <span className="muted">20 parts, with locations. Works with no uploads and no hardware.</span>
-      </div>
-      <h3>Or upload your own</h3>
-      <div className="upload-grid">
-        <label>
-          BOM (CSV): needs reference, value and footprint columns; qty, spares, DNP and polarized are optional
-          <input type="file" accept=".csv,.tsv,.txt,text/csv" onChange={(e) => { setBomFile(e.target.files[0] ?? null); setError(null); setLoaded(null) }} />
-        </label>
-        <label>
-          Pick-and-place (optional): KiCad .pos/.csv, Altium or JLCPCB
-          <input type="file" accept=".csv,.pos,.txt,.tsv,text/csv" onChange={(e) => { setPnpFile(e.target.files[0] ?? null); setError(null); setLoaded(null) }} />
-        </label>
-        <label>
-          Board name
-          <input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Lab 4 sensor board" />
-        </label>
-      </div>
-      <button className="btn primary" onClick={loadFiles} disabled={busy}>
-        {busy ? 'Loading…' : 'Load files'}
-      </button>
-      {error && (
-        <div className="load-error" role="alert">
-          <strong>Could not load the board.</strong> {error}
-        </div>
-      )}
-      {loaded && (
-        <div className="load-ok" role="status">
-          <span>
-            ✓ Loaded <strong>{loaded.name}</strong>: {loaded.text}.
+    <section className="section glass">
+      <div className="pair">
+        {qr && <img className="qr" src={qr} alt="Scan with the phone" />}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <h2>Phone</h2>
+          <div className="code">{pair.code ?? '······'}</div>
+          <span className="chip" style={{ alignSelf: 'flex-start', color: ok ? 'var(--ok)' : undefined }}>
+            <span className={`dot ${ok ? 'placed' : ''}`} /> {ok ? 'Streaming' : pair.status === 'linked' ? 'Linked' : 'Waiting'}
           </span>
-          <button className="btn good" onClick={() => navigate('/build')}>
-            Start building →
-          </button>
+          {pair.error && <span className="err-text">{pair.error}</span>}
+          <a className="faint" style={{ fontSize: '0.8rem' }} href="https://github.com/CrazyBlackStone/assemblyassist/blob/main/docs/phone-hotspot.md" target="_blank" rel="noreferrer">
+            Won’t connect? Use the phone’s hotspot
+          </a>
         </div>
-      )}
-      {warnings.length > 0 && (
-        <details className="warnings" open>
-          <summary>{warnings.length} note(s) about the files</summary>
-          <ul>
-            {warnings.map((w, i) => (
-              <li key={i}>{w}</li>
-            ))}
-          </ul>
-        </details>
-      )}
-      {s.board && (
-        <button
-          className="btn small warn"
-          onClick={() => window.confirm('Clear the board and all progress?') && session.dispatch({ type: 'clear' })}
-        >
-          Clear board and progress
-        </button>
-      )}
+      </div>
     </section>
   )
 }
 
-function CameraSection() {
-  const p = useStore(prefs)
-  const pair = useStore(pairing)
-  const cam = useStore(camera)
-  const [qr, setQr] = useState(null)
-  const [advanced, setAdvanced] = useState(false)
-  const url = pair.code ? pairUrl(pair.code) : null
-
-  useEffect(() => {
-    if (p.cameraSource === 'phone') startHost()
-  }, [p.cameraSource])
-
-  useEffect(() => {
-    if (!url) return setQr(null)
-    QRCode.toDataURL(url, { margin: 1, width: 320 }).then(setQr).catch(() => setQr(null))
-  }, [url])
-
-  const setSource = (cameraSource) => {
-    prefs.set((s) => ({ ...s, cameraSource }))
-    if (cameraSource === 'local') {
-      resetHost()
-      openLocalCamera().catch(() => {})
-    } else {
-      closeLocalCamera()
-    }
+function OrderSection({ p }) {
+  const ai = useAiTask(OrderPlan.TASK)
+  if (!p.plan) {
+    return (
+      <section className="section glass">
+        <h2>Order</h2>
+        <p className="muted">Add a BOM to see the parts.</p>
+      </section>
+    )
   }
-
+  const suggest = () =>
+    ai.run({
+      key: p.board.id,
+      messages: OrderPlan.buildMessages(p.board),
+      simulate: () => OrderPlan.simulate(p.board),
+      validate: (v) => OrderPlan.validate(p.board, v),
+      inputSummary: OrderPlan.inputSummary(p.board),
+      fallbackAction: 'Kept the current order.',
+    })
   return (
-    <section className="card">
-      <h2>2. Camera and microphone</h2>
-      <div className="row">
-        <label className="radio">
-          <input type="radio" checked={p.cameraSource === 'phone'} onChange={() => setSource('phone')} /> Phone over the board (pair below)
-        </label>
-        <label className="radio">
-          <input type="radio" checked={p.cameraSource === 'local'} onChange={() => setSource('local')} /> This device’s camera (phone-only testing, or a webcam)
-        </label>
+    <section className="section glass">
+      <div className="card-row">
+        <h2>Order</h2>
+        <span className="faint" style={{ fontSize: '0.85rem' }}>
+          Drag to reorder
+        </span>
+        <span className="spacer" />
+        {p.plan.source !== 'default' && (
+          <button className="btn sm ghost" onClick={() => dispatch({ type: 'set-plan', plan: defaultPlan(p.board) })}>
+            Reset
+          </button>
+        )}
+        <button className="btn sm" onClick={suggest} disabled={ai.status === 'loading'}>
+          {ai.status === 'loading' ? <span className="spinner" style={{ width: 16, height: 16, borderWidth: 2 }} /> : <Icon name="spark" />} Suggest
+        </button>
       </div>
-
-      {p.cameraSource === 'phone' && (
-        <div className="pairing">
-          {qr && <img className="qr" src={qr} alt="QR code to pair the phone" />}
-          <div>
-            <p>On the phone, scan the QR code or open this address and allow the camera and microphone:</p>
-            <p className="pair-url">{url ?? 'Starting…'}</p>
-            <p>
-              Code: <span className="pair-code">{pair.code ?? '……'}</span>
-            </p>
-            <p>
-              Status: <strong>{pair.status}</strong>
-              {pair.phoneInfo?.width && ` · phone camera ${pair.phoneInfo.width}px wide`}
-            </p>
-            {pair.error && <p className="error-text">{pair.error}</p>}
-            <details className="hotspot-tip">
-              <summary>Won’t connect on campus Wi-Fi? Use the phone’s hotspot</summary>
-              <ol>
-                <li>Plug the phone in, then turn on its hotspot (iPhone: Personal Hotspot → Allow Others to Join; Android: Hotspot &amp; tethering → Wi-Fi hotspot).</li>
-                <li>Connect this laptop to the phone’s hotspot and turn off any VPN. On Windows, set the network to Private.</li>
-                <li>Reload this page, then scan the new QR code with the phone.</li>
-              </ol>
-              <p className="muted small">
-                Video stays on the hotspot; only page loads, pairing and AI calls use mobile data.{' '}
-                <a href="https://github.com/CrazyBlackStone/assemblyassist/blob/main/docs/phone-hotspot.md" target="_blank" rel="noreferrer">
-                  Full guide and troubleshooting
-                </a>
-              </p>
-            </details>
-            <button className="btn small" onClick={() => { resetHost({ newCode: true }); startHost() }}>
-              New code
+      {ai.status === 'error' && <div className="err-text">Suggestion failed: {ai.error}</div>}
+      {ai.status === 'done' && (
+        <div className="cat" style={{ padding: 14, display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <div className="card-row">
+            <AiBadge simulated={ai.meta.simulated} />
+            <b>Suggested order</b>
+            <span className="spacer" />
+            <MarkWrong
+              task="orderPlan"
+              meta={ai.meta}
+              inputSummary={OrderPlan.inputSummary(p.board)}
+              modelSaid={ai.data.categories.map((c) => `${c.name}: ${c.refs.join(',')}`).join(' | ')}
+              uiAction={ai.issues.length ? `Corrected: ${ai.issues.join(' ')}` : 'Offered the order to accept.'}
+              options={['Bad grouping', 'Bad order']}
+            />
+          </div>
+          {ai.data.categories.map((c, i) => (
+            <div key={c.id} style={{ fontSize: '0.9rem' }}>
+              <b>
+                {i + 1}. {c.name}
+              </b>{' '}
+              <span className="muted">{c.reason}</span>
+              <div className="faint">{c.refs.join(' ')}</div>
+            </div>
+          ))}
+          {ai.issues.length > 0 && <div className="note">App fixed: {ai.issues.join(' ')}</div>}
+          <div className="card-row">
+            <button className="btn ok sm" onClick={() => (dispatch({ type: 'set-plan', plan: { ...ai.data, source: ai.meta.simulated ? 'simulated' : 'ai', model: ai.meta.model } }), ai.reset())}>
+              Use it
+            </button>
+            <button className="btn sm" onClick={ai.reset}>
+              Keep mine
             </button>
           </div>
         </div>
       )}
-      {p.cameraSource === 'local' && (
-        <p>
-          {cam.localStream ? 'Camera is on.' : 'Camera is off.'} {cam.error && <span className="error-text">{cam.error}</span>}
-          {!cam.localStream && (
-            <button className="btn small" onClick={() => openLocalCamera().catch(() => {})}>
-              Start camera
-            </button>
-          )}
-        </p>
-      )}
-
-      <button className="btn small" onClick={() => setAdvanced((a) => !a)}>
-        {advanced ? 'Hide' : 'Show'} connection settings (relay server)
-      </button>
-      {advanced && (
-        <div className="advanced">
-          <p className="muted">
-            Leave empty to use the free PeerJS cloud server. If campus Wi-Fi blocks the phone–laptop connection, run a TURN server (e.g. coturn on EC2) and add it below;
-            optionally run your own PeerServer too. Changes apply on “New code”.
-          </p>
-          <label>
-            PeerServer host
-            <input value={p.peerHost} placeholder="(PeerJS cloud)" onChange={(e) => prefs.set((s) => ({ ...s, peerHost: e.target.value.trim() }))} />
-          </label>
-          <label>
-            Port
-            <input type="number" value={p.peerPort} onChange={(e) => prefs.set((s) => ({ ...s, peerPort: Number(e.target.value) }))} />
-          </label>
-          <label>
-            Path
-            <input value={p.peerPath} onChange={(e) => prefs.set((s) => ({ ...s, peerPath: e.target.value }))} />
-          </label>
-          <label className="wide">
-            ICE servers (JSON). Add TURN here, e.g. {'[{"urls":"turn:your-ec2-host:3478","username":"u","credential":"p"}]'}
-            <textarea rows={3} value={p.iceServers} onChange={(e) => prefs.set((s) => ({ ...s, iceServers: e.target.value }))} />
-          </label>
-          <button className="btn small" onClick={() => prefs.set((s) => ({ ...s, iceServers: initialPrefs.iceServers, peerHost: '', peerPort: 443, peerPath: '/' }))}>
-            Reset to defaults
-          </button>
-        </div>
-      )}
-    </section>
-  )
-}
-
-function AiSection() {
-  const p = useStore(prefs)
-  const k = useStore(keys)
-  const cat = useStore(catalog)
-  const [show, setShow] = useState(false)
-  const [catError, setCatError] = useState(null)
-  const provider = activeProvider(p, k)
-  const keyProvider = p.provider === 'auto' ? 'openrouter' : p.provider
-
-  const refreshCatalog = async (force = false) => {
-    try {
-      const models = await loadOpenRouterCatalog({ force })
-      setCatError(null)
-      const { models: next, autoPicked } = autoPickModels(prefs.get().models, models)
-      if (Object.keys(autoPicked).length) prefs.set((s) => ({ ...s, models: next, autoPicked: { ...s.autoPicked, ...autoPicked } }))
-    } catch (e) {
-      setCatError(e.message)
-    }
-  }
-
-  useEffect(() => {
-    if (provider === 'openrouter') refreshCatalog()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [provider])
-
-  return (
-    <section className="card">
-      <h2>3. AI models</h2>
-      <p>
-        Active: <strong className={provider === 'simulated' ? 'sim-text' : ''}>{PROVIDERS[provider].label}</strong>
-        {provider === 'simulated' && '. Add an OpenRouter key to use real models. Everything else works without one.'}
-      </p>
-      <div className="form-grid">
-        <label>
-          Provider
-          <select value={p.provider} onChange={(e) => prefs.set((s) => ({ ...s, provider: e.target.value }))}>
-            <option value="auto">Automatic (OpenRouter if a key is set, else simulated)</option>
-            {Object.entries(PROVIDERS).map(([id, pr]) => (
-              <option key={id} value={id}>
-                {pr.label}
-              </option>
-            ))}
-          </select>
-        </label>
-        {keyProvider !== 'simulated' && (
-          <label>
-            {PROVIDERS[keyProvider].label} API key
-            <span className="row">
-              <input
-                type={show ? 'text' : 'password'}
-                autoComplete="off"
-                value={k[keyProvider] ?? ''}
-                placeholder="paste key"
-                onChange={(e) => keys.set((s) => ({ ...s, [keyProvider]: e.target.value.trim() }))}
-              />
-              <button className="btn small" onClick={() => setShow((x) => !x)}>
-                {show ? 'Hide' : 'Show'}
-              </button>
-            </span>
-            <span className="muted small">{PROVIDERS[keyProvider].keyHelp}</span>
-          </label>
-        )}
-        {p.provider === 'custom' && (
-          <label>
-            Base URL
-            <input value={p.customBaseUrl} placeholder="https://…/v1" onChange={(e) => prefs.set((s) => ({ ...s, customBaseUrl: e.target.value.trim() }))} />
-          </label>
-        )}
-        <label>
-          Key storage
-          <select value={getKeyStorageMode()} onChange={(e) => setKeyStorageMode(e.target.value)}>
-            <option value="local">Remember on this browser</option>
-            <option value="session">Forget when the tab closes (shared computers)</option>
-          </select>
-        </label>
-      </div>
-
-      <h3>Model per call</h3>
-      {provider === 'openrouter' && (
-        <p className="muted small">
-          {cat.models.length ? `${cat.models.length} OpenRouter models loaded.` : 'Loading the OpenRouter model list…'} {catError && <span className="error-text">{catError}</span>}{' '}
-          <button className="btn small" onClick={() => refreshCatalog(true)}>
-            Refresh list
-          </button>
-        </p>
-      )}
-      <table className="models">
-        <thead>
-          <tr>
-            <th>Call</th>
-            <th>Modality</th>
-            <th>Model</th>
-            <th>Price</th>
-          </tr>
-        </thead>
-        <tbody>
-          {Object.entries(DEFAULT_TASKS).map(([task, cfg]) => {
-            const m = cat.models.find((x) => x.id === p.models[task])
-            const options = cat.models.filter((x) => !cfg.needsVision || acceptsImages(x))
-            return (
-              <tr key={task}>
-                <td>{cfg.label}</td>
-                <td>{cfg.modality}</td>
-                <td>
-                  <input
-                    list={`models-${task}`}
-                    value={p.models[task]}
-                    disabled={provider === 'simulated'}
-                    onChange={(e) => prefs.set((s) => ({ ...s, models: { ...s.models, [task]: e.target.value.trim() }, autoPicked: { ...s.autoPicked, [task]: false } }))}
-                  />
-                  <datalist id={`models-${task}`}>
-                    {options.map((x) => (
-                      <option key={x.id} value={x.id}>
-                        {isFree(x) ? 'free · ' : ''}
-                        {x.name}
-                      </option>
-                    ))}
-                  </datalist>
-                  {p.autoPicked[task] && <div className="muted small">Auto-picked: the default model is not listed any more.</div>}
-                  {provider === 'openrouter' && cat.models.length > 0 && !m && <div className="warn-text small">Not in the OpenRouter list.</div>}
-                  {cfg.needsVision && m && !acceptsImages(m) && <div className="error-text small">This model does not accept images.</div>}
-                </td>
-                <td className="small">{priceLabel(provider, m)}</td>
-              </tr>
-            )
-          })}
-        </tbody>
-      </table>
-      <p className="muted small">To swap models for the course, edit src/config/models.js (defaults, timeouts, price table) or change them here.</p>
-    </section>
-  )
-}
-
-function priceLabel(provider, m) {
-  if (provider === 'simulated') return '$0 (simulated)'
-  if (!m) return 'unknown'
-  if (isFree(m)) return 'free'
-  if (m.prompt == null || m.completion == null) return 'unknown'
-  return `$${(m.prompt * 1e6).toFixed(2)} / $${(m.completion * 1e6).toFixed(2)} per 1M in/out`
-}
-
-function VoiceSection() {
-  const p = useStore(prefs)
-  return (
-    <section className="card">
-      <h2>4. Voice</h2>
-      <div className="row">
-        <label className="toggle">
-          <input type="checkbox" checked={p.speakAloud} onChange={(e) => prefs.set((s) => ({ ...s, speakAloud: e.target.checked }))} /> Speak answers aloud
-        </label>
-        <label>
-          Speech rate
-          <input type="range" min={0.6} max={1.6} step={0.1} value={p.voiceRate} onChange={(e) => prefs.set((s) => ({ ...s, voiceRate: Number(e.target.value) }))} />{' '}
-          {p.voiceRate.toFixed(1)}×
-        </label>
-      </div>
-      <p className="muted small">
-        Speech recognition uses the browser (Chrome or Edge recommended). In a loud room, push-to-talk (button or the T key) is more reliable than hands-free. The phone page also has
-        its own microphone button.
-      </p>
+      <BomList plan={p.plan} board={p.board} status={p.status} onChange={(plan) => dispatch({ type: 'set-plan', plan })} />
     </section>
   )
 }

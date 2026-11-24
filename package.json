@@ -11,6 +11,12 @@
     "eval:vision": "node scripts/eval-vision.mjs"
   },
   "dependencies": {
+    "@dnd-kit/core": "^6.3.1",
+    "@dnd-kit/sortable": "^10.0.0",
+    "@dnd-kit/utilities": "^3.2.2",
+    "@tracespace/core": "^5.0.0-alpha.0",
+    "idb-keyval": "^6.3.0",
+    "jszip": "^3.10.2",
     "papaparse": "^5.7.1",
     "peerjs": "^1.5.5",
     "qrcode": "^1.5.4",

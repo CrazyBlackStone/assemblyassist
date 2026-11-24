@@ -1,168 +1,133 @@
-import { PROVIDERS, DEFAULT_TASKS, PRICE_TABLE } from '../../config/models.js'
-import { prefs, keys, activeProvider } from '../../state/settings.js'
+import { PROVIDERS, TASKS, PRICE_TABLE, KEYS, PROXY_URL, hasProvider } from '../../config/ai.js'
 import { recordCall, logFailure } from '../../state/logs.js'
-import { findModel } from './catalog.js'
+import { findModel, modelFor } from './catalog.js'
 import { extractJson } from './json.js'
 
 // ============================================================================
-// The one place the app talks to models. Every call:
-//   - has a timeout and can be cancelled
-//   - is recorded in the cost meter (cost "unknown" when there is no price data)
-//   - logs timeouts, errors and unreadable output to the failure log
+// The one place the app talks to models. Every call has a timeout and can be
+// cancelled, is recorded in the cost meter (cost "unknown" when there is no price
+// data), and logs timeouts, errors and unreadable output to the failure log.
 // Tasks (src/lib/ai/tasks/*) build prompts and validate output; they never fetch.
 // ============================================================================
 
 export class ModelError extends Error {
   constructor(kind, message) {
     super(message)
-    this.kind = kind // 'timeout' | 'cancelled' | 'no-key' | 'http' | 'network' | 'empty'
+    this.kind = kind // 'timeout' | 'cancelled' | 'http' | 'network' | 'empty'
   }
 }
 
-export function taskConfig(task) {
-  const base = DEFAULT_TASKS[task]
-  const p = prefs.get()
-  const provider = activeProvider()
-  return { ...base, task, provider, model: provider === 'simulated' ? 'simulated' : p.models[task] ?? base.model }
+export const baseUrl = (provider) => (PROXY_URL ? `${PROXY_URL}/${provider}` : PROVIDERS[provider].baseUrl)
+
+export function authHeaders(provider) {
+  const h = {}
+  if (!PROXY_URL) h.Authorization = `Bearer ${KEYS[provider]}`
+  if (provider === 'openrouter' && typeof window !== 'undefined') {
+    h['HTTP-Referer'] = window.location.origin
+    h['X-Title'] = 'Assembly Assist'
+  }
+  return h
 }
 
-function resolveCost(provider, model, usageObj) {
-  if (provider === 'simulated') return { cost: 0, costSource: 'simulated' }
-  if (typeof usageObj?.cost === 'number') return { cost: usageObj.cost, costSource: 'provider' }
-  const pt = usageObj?.prompt_tokens
-  const ct = usageObj?.completion_tokens
+export function taskConfig(task) {
+  const t = TASKS[task]
+  const simulated = !hasProvider(t.provider)
+  return { ...t, task, simulated, model: simulated ? 'simulated' : modelFor(task, t.model) }
+}
+
+export function resolveCost(provider, model, usage) {
+  if (typeof usage?.cost === 'number') return { cost: usage.cost, costSource: 'provider' }
+  const pt = usage?.prompt_tokens
+  const ct = usage?.completion_tokens
   const listed = provider === 'openrouter' ? findModel(model) : null
   if (listed && listed.prompt != null && listed.completion != null && pt != null && ct != null) {
     return { cost: pt * listed.prompt + ct * listed.completion + (listed.request ?? 0), costSource: 'price list' }
   }
   const table = PRICE_TABLE[model]
-  if (table && pt != null && ct != null) {
-    return { cost: (pt * table.input + ct * table.output) / 1e6, costSource: 'config price table' }
-  }
+  if (table && pt != null && ct != null) return { cost: (pt * table.input + ct * table.output) / 1e6, costSource: 'price table' }
   return { cost: null, costSource: 'unknown' }
 }
 
-function contentText(message) {
-  const c = message?.content
-  if (typeof c === 'string') return c
-  if (Array.isArray(c)) return c.map((p) => (typeof p === 'string' ? p : p?.text ?? '')).join('')
-  return ''
-}
-
-/**
- * Low-level call. Returns { text, meta }.
- * @param {object} o
- * @param {string} o.task           key of DEFAULT_TASKS
- * @param {Array}  o.messages       OpenAI-format messages (images as image_url parts)
- * @param {AbortSignal} [o.signal]  user cancel
- * @param {() => string} o.simulate canned response for simulated mode
- */
-export async function callModel({ task, messages, signal, simulate }) {
-  const cfg = taskConfig(task)
-  const started = performance.now()
-  const base = { task, provider: cfg.provider, model: cfg.model }
-
-  if (cfg.provider === 'simulated') {
-    await sleep(700 + Math.random() * 900, signal)
-    const text = simulate()
-    const ms = Math.round(performance.now() - started)
-    const meta = { ...base, ms, ok: true, cost: 0, costSource: 'simulated', simulated: true }
-    recordCall(meta)
-    return { text, meta }
-  }
-
-  const provider = PROVIDERS[cfg.provider]
-  const key = keys.get()[cfg.provider]
-  const baseUrl = cfg.provider === 'custom' ? prefs.get().customBaseUrl : provider.baseUrl
-  if (!key) throw fail(base, started, new ModelError('no-key', `No API key set for ${provider.label}. Add one on the Setup screen.`))
-  if (!baseUrl) throw fail(base, started, new ModelError('http', 'No API base URL set for the custom provider.'))
-
+/** fetch with a timeout and an optional cancel signal; maps failures to ModelError. */
+export async function fetchModel(url, init, { timeoutMs, signal }) {
   const controller = new AbortController()
-  const timer = setTimeout(() => controller.abort('timeout'), cfg.timeoutMs)
+  const timer = setTimeout(() => controller.abort('timeout'), timeoutMs)
   const onCancel = () => controller.abort('cancelled')
   signal?.addEventListener('abort', onCancel)
-
   try {
-    const headers = { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` }
-    if (cfg.provider === 'openrouter') {
-      headers['HTTP-Referer'] = window.location.origin
-      headers['X-Title'] = 'Assembly Assist'
-    }
-    let res
-    try {
-      res = await fetch(`${baseUrl.replace(/\/$/, '')}/chat/completions`, {
-        method: 'POST',
-        headers,
-        signal: controller.signal,
-        body: JSON.stringify({
-          model: cfg.model,
-          messages,
-          max_tokens: cfg.maxTokens,
-          temperature: cfg.temperature,
-          ...provider.extraBody,
-        }),
-      })
-    } catch (e) {
-      if (controller.signal.aborted) {
-        const reason = controller.signal.reason === 'cancelled' ? 'cancelled' : 'timeout'
-        throw new ModelError(reason, reason === 'timeout' ? `No answer within ${Math.round(cfg.timeoutMs / 1000)} s.` : 'Cancelled.')
-      }
-      throw new ModelError('network', `Network error: ${e.message}`)
-    }
+    const res = await fetch(url, { ...init, signal: controller.signal })
     const json = await res.json().catch(() => null)
-    if (!res.ok) {
-      const msg = json?.error?.message ?? res.statusText
-      throw new ModelError('http', `${provider.label} returned ${res.status}: ${msg}`)
-    }
-    const text = contentText(json?.choices?.[0]?.message)
-    const usageObj = json?.usage ?? {}
-    const { cost, costSource } = resolveCost(cfg.provider, json?.model ?? cfg.model, usageObj)
-    const meta = {
-      ...base,
-      model: json?.model ?? cfg.model,
-      ms: Math.round(performance.now() - started),
-      ok: Boolean(text),
-      promptTokens: usageObj.prompt_tokens ?? null,
-      completionTokens: usageObj.completion_tokens ?? null,
-      cost,
-      costSource,
-      simulated: false,
-    }
-    recordCall(text ? meta : { ...meta, error: 'empty response' })
-    if (!text) throw new ModelError('empty', 'The model returned an empty answer.')
-    return { text, meta }
+    if (!res.ok) throw new ModelError('http', `${res.status}: ${json?.error?.message ?? res.statusText}`)
+    return json
   } catch (e) {
-    if (e instanceof ModelError && e.kind === 'empty') throw e // already recorded
-    throw fail(base, started, e instanceof ModelError ? e : new ModelError('network', e.message))
+    if (e instanceof ModelError) throw e
+    if (controller.signal.aborted) {
+      const reason = controller.signal.reason === 'cancelled' ? 'cancelled' : 'timeout'
+      throw new ModelError(reason, reason === 'timeout' ? `No answer within ${Math.round(timeoutMs / 1000)} s.` : 'Cancelled.')
+    }
+    throw new ModelError('network', `Network error: ${e.message}`)
   } finally {
     clearTimeout(timer)
     signal?.removeEventListener('abort', onCancel)
   }
 }
 
-function fail(base, started, err) {
-  if (err.kind !== 'no-key') {
-    recordCall({ ...base, ms: Math.round(performance.now() - started), ok: false, cost: null, costSource: 'unknown', error: err.message })
-  }
-  return err
-}
-
-function sleep(ms, signal) {
-  return new Promise((resolve, reject) => {
+const sleep = (ms, signal) =>
+  new Promise((resolve, reject) => {
     const t = setTimeout(resolve, ms)
     signal?.addEventListener('abort', () => {
       clearTimeout(t)
       reject(new ModelError('cancelled', 'Cancelled.'))
     })
   })
+
+function contentText(message) {
+  const c = message?.content
+  if (typeof c === 'string') return c
+  if (Array.isArray(c)) return c.map((p) => (typeof p === 'string' ? p : (p?.text ?? ''))).join('')
+  return ''
+}
+
+/** Low-level chat call. Returns { text, meta }. */
+export async function callModel({ task, messages, signal, simulate }) {
+  const cfg = taskConfig(task)
+  const started = performance.now()
+  const base = { task, provider: cfg.provider, model: cfg.model }
+  const ms = () => Math.round(performance.now() - started)
+
+  if (cfg.simulated) {
+    await sleep(500 + Math.random() * 700, signal)
+    const meta = { ...base, ms: ms(), ok: true, cost: 0, costSource: 'simulated', simulated: true }
+    recordCall(meta)
+    return { text: simulate(), meta }
+  }
+
+  try {
+    const json = await fetchModel(
+      `${baseUrl(cfg.provider)}/chat/completions`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...authHeaders(cfg.provider) },
+        body: JSON.stringify({ model: cfg.model, messages, max_tokens: cfg.maxTokens, temperature: cfg.temperature, ...PROVIDERS[cfg.provider].extraBody }),
+      },
+      { timeoutMs: cfg.timeoutMs, signal },
+    )
+    const text = contentText(json?.choices?.[0]?.message)
+    const usage = json?.usage ?? {}
+    const model = json?.model ?? cfg.model
+    const meta = { ...base, model, ms: ms(), ok: Boolean(text), promptTokens: usage.prompt_tokens ?? null, completionTokens: usage.completion_tokens ?? null, ...resolveCost(cfg.provider, model, usage), simulated: false }
+    recordCall(text ? meta : { ...meta, error: 'empty response' })
+    if (!text) throw new ModelError('empty', 'The model returned an empty answer.')
+    return { text, meta }
+  } catch (e) {
+    if (e.kind !== 'empty') recordCall({ ...base, ms: ms(), ok: false, cost: null, costSource: 'unknown', error: e.message })
+    throw e
+  }
 }
 
 /**
- * High-level runner used by every task: call -> extract JSON -> validate.
- * Logs failures automatically and tells the UI what fallback it is showing.
- *
- * validate(value) must return { data, issues } (issues: corrections the app made) or throw.
- * Returns { ok: true, data, issues, meta, raw } or { ok: false, error, kind, meta? }.
+ * call -> extract JSON -> validate. Logs failures and what the UI fell back to.
+ * validate(value) returns { data, issues } (issues: corrections the app made) or throws.
  */
 export async function runTask({ task, messages, signal, simulate, validate, inputSummary, fallbackAction }) {
   let text
@@ -171,7 +136,7 @@ export async function runTask({ task, messages, signal, simulate, validate, inpu
     ;({ text, meta } = await callModel({ task, messages, signal, simulate }))
   } catch (e) {
     const kind = e.kind ?? 'error'
-    if (kind !== 'cancelled' && kind !== 'no-key') {
+    if (kind !== 'cancelled') {
       logFailure({ task, model: taskConfig(task).model, kind: kind === 'timeout' ? 'timeout' : 'error', inputSummary, modelSaid: e.message, uiAction: fallbackAction })
     }
     return { ok: false, kind, error: e.message }
@@ -183,9 +148,7 @@ export async function runTask({ task, messages, signal, simulate, validate, inpu
   }
   try {
     const { data, issues = [] } = validate(parsed.value)
-    if (issues.length) {
-      logFailure({ task, model: meta.model, kind: 'corrected', inputSummary, modelSaid: text, uiAction: `App corrected the output: ${issues.join(' ')}` })
-    }
+    if (issues.length) logFailure({ task, model: meta.model, kind: 'corrected', inputSummary, modelSaid: text, uiAction: `App corrected the output: ${issues.join(' ')}` })
     return { ok: true, data, issues, meta, raw: text }
   } catch (e) {
     logFailure({ task, model: meta.model, kind: 'invalid-output', inputSummary, modelSaid: text, uiAction: `${e.message} ${fallbackAction}` })

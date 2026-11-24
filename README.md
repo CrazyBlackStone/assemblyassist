@@ -1,8 +1,8 @@
 # Assembly Assist
 
-A browser app that guides a person through hand-assembling a circuit board: a smart BOM that tracks which parts are placed, voice control, orientation diagrams for polarized parts, a magnified live view from a phone camera, and an AI check of each joint after soldering. CS160 final project.
+A browser app that guides hand assembly of a circuit board. A phone propped over the board streams its camera to the laptop. The app shows the next part and how it faces, renders the board from your Gerbers with every placed part on it, and has a vision model check each part's orientation (and its solder joints, unless you use paste) right after it is placed. Voice controls everything, so both hands can stay on the iron and tweezers. CS160 final project.
 
-It runs with **no API key and no hardware**: load the demo board, and AI features answer in *simulated* mode, labeled "Simulated AI", until you add a key.
+Live: https://crazyblackstone.github.io/assemblyassist/
 
 ## Run it
 
@@ -14,62 +14,76 @@ npm install
 npm run dev
 ```
 
-Open the printed URL, then **Setup → Use the demo board**.
+The workspace opens with a **Demo board** project (Gerbers, BOM and CPL included), so everything works with no uploads and no hardware.
 
 ```bash
 npm test
 ```
 
-## Deploy (GitHub Pages)
+## Screens
 
-`.github/workflows/deploy.yml` tests, builds and deploys on every push to `main`. One-time setup: in the GitHub repo go to **Settings → Pages → Source: GitHub Actions**. The site appears at `https://<owner>.github.io/<repo>/`. The app uses hash routing (`#/build`) and relative asset paths, so it works from any sub-path without configuration.
+- **Workspace**: your projects, each with a board thumbnail and progress. Projects are stored in the browser (IndexedDB).
+- **Setup**: upload Gerber (.zip or files), BOM and CPL; turn the soldering check off for solder paste; choose camera and microphone; pair the phone by QR code; drag the BOM into the order you want, or ask for a suggested order.
+- **Build**:
+  - **Left rail**: the build order as ref des. Tap it to open the full list, where parts and whole categories can be dragged.
+  - **Panel 1**: the current part with a drawing of its package as it sits on the board, the pin-1 or polarity mark lit, the next part, and Back / Skip / Next.
+  - **Panel 2**: the board rendered from the Gerbers. Placed parts appear on it, and the current part hovers and lands when placed.
+  - **Panel 3**: the phone camera. After **Next**, it blurs and shows the cropped part with the AI's orientation and solder verdict.
+  - **Bottom bar**: what was heard, what the app answers, and a soldering tip for the current package.
+  - **Done** (top right): re-checks every placed part from one photo, lighting each up on the board in turn.
 
-Phones only allow camera and microphone on HTTPS, so pair the phone with the deployed site (GitHub Pages is HTTPS), not with `http://<laptop-ip>:5173`.
+Keyboard (works with a USB foot pedal): `Space` next · `S` skip · `Z` back · `K` check · `Y` confirm · hold `T` to talk.
 
-## Use it
+Voice: *next, skip, back, C8 next, capacitors next, go to U2, where is C8, check, looks good, review*. Anything else, such as *"do the resistors before the LEDs"* or *"how do I fix a bridge?"*, goes to the language model, which can only act on parts and categories that exist on the board.
 
-| Screen | What it does |
-| --- | --- |
-| **Setup** | Load the demo board or upload a BOM CSV (+ optional pick-and-place). Pick camera source and pair the phone by QR code. Enter an API key and choose models. |
-| **Build** | Big current-part card, progress, orientation diagram, live view with zoom, board map, check panel, voice bar. |
-| **Blocks** | Build plan (rule-based or AI), reorder blocks, multimeter checkpoints, tray compartments. |
-| **Log** | Cost per call type, failure log, exports (JSON/CSV). |
+## AI
 
-Keyboard (works with a USB foot pedal that sends keys): `Space` placed · `S` skip · `Z` undo · `O` confirm orientation · `K` check · `D` dropped · `T` push-to-talk · `←/→` previous/next.
+All model calls go through one provider layer (`src/lib/ai/provider.js`). Models, timeouts and prices are set in `src/config/ai.js`. Nothing about keys or models appears in the app.
 
-Voice: *next, skip, back, where is C8, where are the 100 nanofarad, what value is this, which way, confirm, check this, I dropped it, repeat, help.* The transcript and how it was understood are always shown.
+| Call | Modality | What the app checks | When it fails |
+| --- | --- | --- | --- |
+| Speech to text | speech | n/a (shown, can be marked "misheard") | browser recognizer, then buttons |
+| Placement check | image | low confidence never shows "no problem"; listed issues force "problem"; non-polarized parts can't be "flipped"; solder issues ignored when the check is off | "not checked"; check by eye |
+| Voice assistant | language | every ref and category must exist; advice must cite a technique-library entry | "say that again" |
+| Order suggestion | language | every part exactly once; invented parts removed | current order kept |
 
-## The three AI calls
+Every AI result carries an **AI** badge (**SIM** when simulated) and a thumbs-down that writes to the failure log. Timeouts, errors, unreadable answers and app corrections are logged automatically. The cost chip in the top bar is always visible, and opens the cost breakdown and failure log with JSON/CSV export.
 
-All go through one provider layer (`src/lib/ai/provider.js`). Swap models in `src/config/models.js` or on the Setup screen.
+### Keys
 
-| Call | Modality | Input | The app checks the output by… | When it fails |
-| --- | --- | --- | --- | --- |
-| Build plan | language | BOM + positions | every part exactly once; invented parts removed | rule-based order stays |
-| Solder check | image | cropped photo + BOM context | enum verdicts; low-confidence "looks right" → "can't tell" | check by eye |
-| Fix help | language | issue + technique library entries | every step must cite a real library entry | show library entries as written |
+Keys are build-time environment variables (`.env.example` lists them):
+- **Local development**: put them in `.env.local`.
+- **GitHub Pages**: add repository secrets `OPENROUTER_API_KEY` (and optionally `OPENAI_API_KEY` for speech-to-text) under Settings → Secrets and variables → Actions; the deploy workflow passes them into the build.
 
-Speech in and out use the browser's built-in Web Speech API. Voice commands are matched by a fixed grammar, so answers come straight from the board data.
+With no key, AI calls run in simulated mode and speech uses the browser recognizer.
 
-Every AI output is shown through one component (`AiResult`) that adds the AI-generated label, model, time, cost, and the *helpful* / *mark as wrong* buttons. Timeouts, errors, unreadable output and app corrections are logged to the failure log automatically.
+**Warning:** a key built into a public static site can be read by anyone who opens it. Set a spending limit on the key, or point `VITE_AI_PROXY_URL` at a small server (for example on the EC2 backend) that adds the key itself, so no key ships to the browser.
+
+### Verification crops
+
+After a two-tap camera calibration (tap two highlighted parts on the video), each check crops just that part from a full-resolution frame. The crop is sized to its footprint and rotated to the part's reference orientation, so the prompt can say exactly where the pin-1 or cathode mark must be. Without calibration, the user taps the part instead.
 
 ## Files the team owns
 
-- `src/data/techniques.json`: the technique library. Fix help can only choose and adapt these entries. The seed entries are drafts (`"reviewed": false`, shown as "draft" in the UI); the hardware team should review them and set `reviewed: true`.
-- `test-set/manifest.json` + `test-set/photos/`: photos for the vision accuracy test. Run it with:
+- `src/data/techniques.json`: the technique library and one-line tips per package family. All entries are drafts (`"reviewed": false`) until the hardware team checks them.
+- `test-set/manifest.json` + `test-set/photos/`: close-up photos of single components. Run the accuracy test with:
 
 ```bash
 OPENROUTER_API_KEY=sk-or-... npm run eval:vision
 ```
 
-It writes `test-set/results/<time>.csv/.json` and prints verdict accuracy, missed problems (the safety number), false alarms and the can't-tell rate. `npm run eval:vision -- --dry-run` checks the script without a key.
+It reports verdict accuracy, orientation accuracy, missed flips and problems, false alarms and the can't-tell rate.
 
-## Pairing and the optional EC2 relay
+- `scripts/make-demo-gerbers.mjs` regenerates the demo board's Gerbers from its BOM/CPL.
 
-Pairing uses PeerJS (WebRTC). By default it uses the free PeerJS cloud server and Google's public STUN server. If campus Wi-Fi blocks the direct phone–laptop connection, the app says so. The fix is a TURN relay (for example coturn on EC2), entered under **Setup → Camera → connection settings → ICE servers**; no code change or rebuild needed. A self-hosted PeerServer can be entered in the same place. Until then, use the phone's own hotspot: see [docs/phone-hotspot.md](docs/phone-hotspot.md).
+## Deploy
+
+`.github/workflows/deploy.yml` tests, builds and deploys every push to `main`. Pages must be set to **Source: GitHub Actions**.
+
+## Pairing
+
+The phone opens the QR code's link and streams over WebRTC (PeerJS). If campus Wi-Fi blocks the connection, use the phone's hotspot ([docs/phone-hotspot.md](docs/phone-hotspot.md)), or set `VITE_ICE_SERVERS` to a TURN relay such as coturn on EC2.
 
 ## Privacy
 
-Photos stay in memory in the browser tab and are never written to storage or logs. Only the cropped area is sent, and only when the user taps "Send to AI check". API keys live in the browser's localStorage, or sessionStorage if "forget when the tab closes" is chosen. They are sent only to the chosen provider.
-
-See [docs/PLAN.md](docs/PLAN.md) for design decisions and what's left.
+Camera frames and crops stay in memory and are never stored; only the crop of the part being checked is sent to the model. Don't point the camera at confidential designs.

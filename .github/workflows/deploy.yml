@@ -27,6 +27,13 @@ jobs:
       - run: npm ci
       - run: npm test
       - run: npm run build
+        env:
+          # Repository secrets (Settings -> Secrets and variables -> Actions). Empty = simulated AI.
+          VITE_OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          VITE_OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          VITE_AI_PROXY_URL: ${{ secrets.AI_PROXY_URL }}
+          VITE_ICE_SERVERS: ${{ secrets.ICE_SERVERS }}
+          VITE_PEER_HOST: ${{ secrets.PEER_HOST }}
       - uses: actions/upload-pages-artifact@v3
         if: github.event_name != 'pull_request'
         with:

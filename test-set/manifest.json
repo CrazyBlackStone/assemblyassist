@@ -1,5 +1,5 @@
 {
-  "_readme": "One entry per close-up photo of ONE part (crop it so the part fills most of the frame, as the app does). Put photos in test-set/photos/ (gitignored by default). expected.verdict: looks_right | possible_problem. expected.issue when there is a problem: flipped, missing, bridged, lifted_lead, insufficient_solder, excess_solder, cold_joint, tombstoned, misaligned, wrong_part, other. marking for polarized parts: pin1, cathode, tantalum, electrolytic. The two entries below are examples: replace them with real photos.",
+  "_readme": "One entry per close-up photo of ONE component, cropped so the part fills most of the frame (as the app does). Put photos in test-set/photos/ (gitignored). If you also turn each crop so the part sits in its reference orientation (pin 1 top-left, cathode / + on the left), set markWhere to where the mark should be ('top-left', 'left', ...); the app does this automatically once the camera is calibrated. expected.verdict: ok | problem. expected.orientation: correct | wrong (polarized parts). expected.issue: flipped, missing, misaligned, wrong_part, tombstoned, bridged, insufficient_solder, excess_solder, cold_joint, lifted_lead, other. checkSoldering: false for solder-paste boards that are not reflowed yet. The two entries are examples: replace them with real photos.",
   "photos": [
     {
       "file": "photos/example-01-u1-good.jpg",
@@ -8,18 +8,20 @@
       "footprint": "SOIC-8_5.3x5.3mm_P1.27mm",
       "polarized": true,
       "marking": "pin1",
-      "neighbors": ["C4 (100nF)", "C8 (100nF)"],
-      "expected": { "verdict": "looks_right", "issue": null }
+      "markWhere": "top-left",
+      "checkSoldering": true,
+      "expected": { "verdict": "ok", "orientation": "correct", "issue": null }
     },
     {
-      "file": "photos/example-02-u1-bridge.jpg",
-      "ref": "U1",
-      "value": "ATtiny85-20SU",
-      "footprint": "SOIC-8_5.3x5.3mm_P1.27mm",
+      "file": "photos/example-02-d1-flipped.jpg",
+      "ref": "D1",
+      "value": "LED red",
+      "footprint": "LED_0805_2012Metric",
       "polarized": true,
-      "marking": "pin1",
-      "neighbors": [],
-      "expected": { "verdict": "possible_problem", "issue": "bridged" }
+      "marking": "cathode",
+      "markWhere": "left",
+      "checkSoldering": false,
+      "expected": { "verdict": "problem", "orientation": "wrong", "issue": "flipped" }
     }
   ]
 }

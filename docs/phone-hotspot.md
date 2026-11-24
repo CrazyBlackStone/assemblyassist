@@ -22,20 +22,20 @@ The phone needs a working data connection, and the hotspot must be allowed on yo
    - Android: Settings → Network & internet (or Connections) → Hotspot & tethering → **Wi-Fi hotspot** → on. Note the network name and password.
 3. **Connect the laptop to the phone's hotspot** in its Wi-Fi menu. Disconnect from campus Wi-Fi first, and turn off any VPN on the laptop.
    - Windows: if asked, choose **Private network** (Settings → Network → the hotspot → Network profile: Private). The firewall is stricter on "Public".
-4. **On the laptop**, open https://crazyblackstone.github.io/assemblyassist/ → **Setup** → section 2 → choose **Phone over the board**. A QR code and a 6-letter code appear.
-5. **On the phone**, scan the QR code with the camera app. It opens in Safari (iPhone) or Chrome (Android). Or open the same site and type the code. Tap **Start camera and connect** and allow camera and microphone.
-6. **Check the laptop header**: it should change from *Phone: waiting* to **Phone: streaming**, and the live view on the Build screen shows the camera.
+4. **On the laptop**, open https://crazyblackstone.github.io/assemblyassist/ and your project's **Setup** with **Camera: Phone**. A QR code and a 6-letter code appear there, and in the camera panel of the build screen until a phone connects.
+5. **On the phone**, scan the QR code with the camera app. It opens in Safari (iPhone) or Chrome (Android). Tap **Connect** and allow the camera (and the microphone, if the project uses the phone's mic).
+6. **Check the laptop**: the phone card in Setup changes to **Streaming**, and the camera panel on the build screen shows the video.
 7. Prop the phone 15–25 cm above the board, camera facing down. Keep the phone page open in the foreground; the app keeps the screen awake.
 
 ## If it doesn't connect
 
 | What you see | Try |
 | --- | --- |
-| Phone says “No laptop found with that code” | Check the code matches the laptop. On the laptop, stay on the app (don't close the tab). Tap **New code** and scan again. |
-| Phone or laptop says it can't reach the pairing server | The phone has no data. Check mobile data is on and the hotspot shows the laptop as connected. |
-| “Found each other but could not connect directly” | Turn off VPNs on both devices (and iCloud Private Relay or similar “private” DNS features on the phone if needed). On iPhone, toggle **Maximize Compatibility**. On Windows, set the network to **Private**. Reload both pages. |
-| Laptop shows *Phone: linked* but no video | Reload the phone page and tap **Start camera and connect** again. Make sure no other app is using the phone camera. |
-| Voice commands from the phone don't work | Use Chrome on Android or Safari on iPhone; otherwise use the laptop's **Talk** button or the keyboard. |
-| Still nothing | Use phone-only mode: open the site on the phone itself → Setup → **This device's camera**. Everything except the big laptop display works the same. |
+| Phone says “No laptop found with that code” | Check the code matches the laptop and keep the laptop tab open. Reload the laptop page and scan the QR code again. |
+| The pairing server can't be reached | The phone has no data. Check mobile data is on and the hotspot shows the laptop as connected. |
+| “Can’t connect directly on this Wi-Fi” | Turn off VPNs on both devices (and iCloud Private Relay or similar “private” DNS features on the phone if needed). On iPhone, toggle **Maximize Compatibility**. On Windows, set the network to **Private**. Reload both pages. |
+| Setup shows *Linked* but no video | Reload the phone page and tap **Connect** again. Make sure no other app is using the phone camera. |
+| Voice from the phone doesn't work | Set **Microphone: Laptop** in Setup, or use the keyboard. |
+| Still nothing | Run the app on the phone alone: open the site there, open the demo or create the project on the phone (projects are stored per browser), and set **Camera: This device**. |
 
-If hotspots aren't an option on the network you'll present on, the long-term fix is a TURN relay (for example coturn on the EC2 server), entered under Setup → connection settings → ICE servers.
+If hotspots aren't an option on the network you'll present on, the long-term fix is a TURN relay (for example coturn on the EC2 server), set as `VITE_ICE_SERVERS` at build time (see `.env.example`).

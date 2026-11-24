@@ -64,13 +64,21 @@ export function listen({ continuous = false, onResult, onState, onError }) {
 }
 
 let lastSpoken = ''
+let speaking = false
+/** True while the app is talking, so hands-free capture can ignore its own voice. */
+export const isSpeaking = () => speaking || (canSpeak() && window.speechSynthesis.speaking)
+
 export function speak(text, { rate = 1, enabled = true } = {}) {
   lastSpoken = text
-  if (!enabled || !canSpeak()) return
+  if (!enabled || !canSpeak() || !text) return
   window.speechSynthesis.cancel()
   const u = new SpeechSynthesisUtterance(text)
   u.rate = rate
   u.lang = 'en-US'
+  speaking = true
+  u.onend = u.onerror = () => {
+    speaking = false
+  }
   window.speechSynthesis.speak(u)
 }
 export const getLastSpoken = () => lastSpoken

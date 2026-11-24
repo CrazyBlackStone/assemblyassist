@@ -110,37 +110,53 @@ export function findValueGroups(text, groups) {
 
 // ---------- commands ----------
 
+// "next" only means "this part is placed" when nothing else of substance was said.
+const FILLER = new Set(['next', 'done', 'placed', 'finished', 'ok', 'okay', 'got', 'it', 'im', "i'm", 'that', 'thats', "that's", 'this', 'one', 'part', 'go', 'please', 'and', 'the', 'is', 'in', 'on'])
+
 const has = (t, ...words) => words.some((w) => new RegExp(`\\b${w}\\b`).test(t))
 
 /**
- * @returns {{type: string, ref?: string, groups?: object[]}} type is one of:
- *  placed, skip, back, where, value, dropped, check, confirm, orientation, repeat, jump, help, unknown
+ * Simple, fast commands. Anything this does not recognise goes to the language model.
+ * @returns {{type: string, ref?: string, refs?: string[], groups?: object[], categoryId?: string}}
+ *  types: placed, skip, back, jump, move-next, category-next, where, where-value, value,
+ *         check, confirm, problem, review, repeat, help, unknown
  */
-export function parseCommand(transcript, board) {
-  const t = String(transcript ?? '').toLowerCase().trim()
+export function parseCommand(transcript, board, plan = null) {
+  const t = String(transcript ?? '').toLowerCase().replace(/[.!?,]/g, ' ').replace(/\s+/g, ' ').trim()
   if (!t) return { type: 'unknown' }
   const refs = board ? Object.keys(board.parts) : []
   const ref = board ? findRef(t, refs) : null
+  const words = t.split(' ')
 
-  if (has(t, 'dropped', 'drop', 'lost', 'lose')) return { type: 'dropped', ref }
   if (has(t, 'where')) {
     if (ref) return { type: 'where', ref }
     const groups = board ? findValueGroups(t, board.groups) : []
-    return groups.length ? { type: 'where-value', groups } : { type: 'where', ref: null }
+    return groups.length ? { type: 'where-value', groups } : { type: 'unknown' }
   }
-  if (has(t, 'what') && has(t, 'value', 'this', 'part', 'is')) return { type: 'value', ref }
-  if (has(t, 'which way', 'orientation', 'polarity', 'direction', 'face', 'facing')) return { type: 'orientation', ref }
-  if (has(t, 'check', 'inspect', 'look')) return { type: 'check', ref }
-  if (has(t, 'confirm', 'confirmed', 'correct', 'orientation ok', 'looks good', 'yes')) return { type: 'confirm', ref }
+  if (has(t, 'what') && has(t, 'value', 'this', 'part')) return { type: 'value', ref }
+  if (has(t, 'review', 'verify all', 'check all', 'check everything', 'all done', 'finish', 'finished')) return { type: 'review' }
+  if (has(t, 'check', 'verify', 'inspect')) return { type: 'check', ref }
+  if (has(t, 'looks good', 'confirm', 'confirmed', 'correct', 'yes', 'good')) return { type: 'confirm' }
+  if (has(t, 'problem', 'bad', 'wrong')) return { type: 'problem' }
   if (has(t, 'skip', 'later')) return { type: 'skip', ref }
   if (has(t, 'back', 'undo', 'oops')) return { type: 'back' }
   if (has(t, 'repeat', 'again', 'say that')) return { type: 'repeat' }
   if (has(t, 'help', 'commands')) return { type: 'help' }
-  if (ref && has(t, 'go', 'jump', 'show', 'open', 'select')) return { type: 'jump', ref }
-  if (has(t, 'next', 'done', 'placed', 'finished', 'ok', 'okay')) return { type: 'placed', ref }
-  if (ref) return { type: 'jump', ref }
+  if (has(t, 'next') && plan && !ref && words.length <= 5) {
+    const cats = plan.categories.filter((c) =>
+      c.name
+        .toLowerCase()
+        .split(/[^a-z]+/)
+        .filter((w) => w.length >= 3 && w !== 'and')
+        .some((w) => new RegExp(`\\b${w.replace(/s$/, '')}s?\\b`).test(t)),
+    )
+    if (cats.length === 1) return { type: 'category-next', categoryId: cats[0].id }
+  }
+  if (ref && has(t, 'next', 'after this', 'then')) return { type: 'move-next', refs: [ref] }
+  if (ref && has(t, 'go', 'jump', 'show', 'open', 'now', 'switch')) return { type: 'jump', ref }
+  if (has(t, 'next', 'done', 'placed', 'finished', 'ok', 'okay') && words.every((w) => FILLER.has(w))) return { type: 'placed' }
+  if (ref && words.length <= 3) return { type: 'jump', ref }
   return { type: 'unknown' }
 }
 
-export const HELP_TEXT =
-  'Say: next, skip, back, where is C8, where are the 100 nanofarad, what value is this, which way, confirm, check this, I dropped it, repeat.'
+export const HELP_TEXT = 'Say next, skip, back, C8 next, capacitors next, where is C8, check, confirm, or ask a question.'

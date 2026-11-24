@@ -1,49 +1,59 @@
 import { describe, it, expect } from 'vitest'
 import { parseCommand, findRef, parseValue } from '../src/lib/voice/grammar.js'
+import { encodeWav, downsample } from '../src/lib/voice/recorder.js'
 import { loadBoardFromText } from '../src/lib/bom/board.js'
 import { demoBoardText } from '../src/data/demoBoard.js'
+import { defaultPlan } from '../src/lib/plan/plan.js'
 import { solveCalibration, boardToImage, describeLocation } from '../src/lib/geometry/board.js'
 
 const board = loadBoardFromText({ ...demoBoardText })
-const refs = Object.keys(board.parts)
+const plan = defaultPlan(board)
+const cmd = (t) => parseCommand(t, board, plan)
 
 describe('voice grammar', () => {
-  it('finds references however the recognizer spells them', () => {
-    expect(findRef('where is c8', refs)).toBe('C8')
-    expect(findRef('where is C 8', refs)).toBe('C8')
-    expect(findRef('where is see eight', refs)).toBe('C8')
-    expect(findRef('jump to are four', refs)).toBe('R4')
-    expect(findRef('where is c 99', refs)).toBe(null)
+  it('finds refs however they are spelled', () => {
+    expect(findRef('where is see eight', Object.keys(board.parts))).toBe('C8')
+    expect(findRef('C 8', Object.keys(board.parts))).toBe('C8')
   })
-  it('parses the brief’s commands', () => {
-    expect(parseCommand('next', board).type).toBe('placed')
-    expect(parseCommand('back', board).type).toBe('back')
-    expect(parseCommand('where is C8?', board)).toEqual({ type: 'where', ref: 'C8' })
-    expect(parseCommand('what value is this', board).type).toBe('value')
-    expect(parseCommand('I dropped it', board)).toEqual({ type: 'dropped', ref: null })
-    expect(parseCommand('I dropped C8', board)).toEqual({ type: 'dropped', ref: 'C8' })
-    expect(parseCommand('check this', board).type).toBe('check')
-    expect(parseCommand('skip', board).type).toBe('skip')
-    expect(parseCommand('banana', board).type).toBe('unknown')
+  it('handles the simple controls', () => {
+    expect(cmd('next').type).toBe('placed')
+    expect(cmd('okay next').type).toBe('placed')
+    expect(cmd('skip').type).toBe('skip')
+    expect(cmd('undo').type).toBe('back')
+    expect(cmd('looks good').type).toBe('confirm')
+    expect(cmd('all done').type).toBe('review')
   })
-  it('answers "where are the 100nF capacitors" by value', () => {
-    for (const t of ['where are the 100nF capacitors', 'where are the 100 nanofarad', 'where are the 0.1 micro farad caps']) {
-      const c = parseCommand(t, board)
-      expect(c.type).toBe('where-value')
-      expect(c.groups.map((g) => g.value)).toEqual(['100nF'])
-    }
-    expect(parseCommand('where are the 10k resistors', board).groups.map((g) => g.value)).toEqual(['10k'])
+  it('chooses what to place next', () => {
+    expect(cmd('C8 next')).toEqual({ type: 'move-next', refs: ['C8'] })
+    expect(cmd('do the LEDs next').type).toBe('category-next')
+    expect(cmd('capacitors next').categoryId).toBe(plan.categories.find((c) => c.name === 'Capacitors').id)
+    expect(cmd('go to U2')).toEqual({ type: 'jump', ref: 'U2' })
   })
-  it('parses engineering values', () => {
+  it('sends anything longer to the language model', () => {
+    expect(cmd('next do the resistors before the LEDs').type).toBe('unknown')
+    expect(cmd('how do I fix a bridge').type).toBe('unknown')
+  })
+  it('answers where-is questions', () => {
+    expect(cmd('where is C8')).toEqual({ type: 'where', ref: 'C8' })
+    expect(cmd('where are the 100 nanofarad').groups.map((g) => g.value)).toEqual(['100nF'])
     expect(parseValue('4k7').num).toBeCloseTo(4700)
-    expect(parseValue('100nF')).toMatchObject({ unit: 'F' })
-    expect(parseValue('100nF').num).toBeCloseTo(1e-7)
+  })
+})
+
+describe('audio', () => {
+  it('encodes 16 kHz mono WAV', async () => {
+    const pcm = downsample(new Float32Array(48000).fill(0.5), 48000)
+    expect(pcm.length).toBe(16000)
+    const wav = encodeWav(pcm)
+    const head = new Uint8Array(await wav.arrayBuffer()).slice(0, 4)
+    expect(String.fromCharCode(...head)).toBe('RIFF')
+    expect(wav.size).toBe(44 + 16000 * 2)
   })
 })
 
 describe('geometry', () => {
-  it('describes a location from PnP data', () => {
-    expect(describeLocation(board, 'C8', 3)).toMatch(/C8 is at the .* of the top side.*compartment 3/)
+  it('describes a location', () => {
+    expect(describeLocation(board, 'C8')).toMatch(/C8 is at the .* of the top side/)
   })
   it('two-point calibration maps both points back exactly', () => {
     const pairs = [

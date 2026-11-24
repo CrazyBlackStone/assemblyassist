@@ -1,45 +1,64 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { useHashRoute } from './lib/router.js'
 import { useStore } from './lib/store.js'
-import { session } from './state/session.js'
-import { prefs } from './state/settings.js'
+import { project, openProject, loadWorkspace } from './state/projects.js'
 import { ui } from './state/ui.js'
-import { startHost, onPhoneMessage } from './lib/pairing/pairing.js'
-import { handleTranscript } from './lib/voice/controller.js'
-import { Header } from './components/Header.jsx'
+import { onPhoneMessage, configurePhone, startHost } from './lib/pairing/pairing.js'
+import { handleClip, handleUtterance } from './lib/voice/controller.js'
+import { ensureDemo } from './lib/projects/load.js'
+import { refreshCatalog } from './lib/ai/catalog.js'
+import { Workspace } from './screens/Workspace.jsx'
 import { Setup } from './screens/Setup.jsx'
 import { Build } from './screens/Build.jsx'
-import { Blocks } from './screens/Blocks.jsx'
-import { Log } from './screens/Log.jsx'
 import { Phone } from './screens/Phone.jsx'
+import { LogSheet } from './components/LogSheet.jsx'
 
 export default function App() {
   const [route, navigate] = useHashRoute()
-  const hasBoard = useStore(session, (s) => Boolean(s.board))
-  const cameraSource = useStore(prefs, (p) => p.cameraSource)
+  const p = useStore(project)
   const toast = useStore(ui, (u) => u.toast)
+  const [ready, setReady] = useState(false)
   const isPhone = route.path === '/phone'
+  const m = /^\/p\/([^/]+)\/(setup|build)$/.exec(route.path)
+  const projectId = m?.[1]
+  const page = m?.[2] ?? 'workspace'
 
-  // The laptop keeps its pairing code alive on every screen, and routes phone transcripts to voice commands.
   useEffect(() => {
-    if (isPhone || cameraSource !== 'phone') return
+    if (isPhone) return
+    loadWorkspace()
+      .then(ensureDemo)
+      .finally(() => setReady(true))
+    refreshCatalog()
+  }, [isPhone])
+
+  useEffect(() => {
+    if (projectId) openProject(projectId).then((x) => !x && navigate('/'))
+    else project.set(null)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [projectId])
+
+  // Laptop side of the phone link: keep pairing alive, route the phone's microphone.
+  const usesPhone = p?.settings.cameraSource === 'phone' || p?.settings.micSource === 'phone'
+  useEffect(() => {
+    if (isPhone || !usesPhone) return
     startHost()
+    configurePhone({ mic: p.settings.micSource })
     return onPhoneMessage((msg) => {
-      if (msg.type === 'transcript') handleTranscript(msg.text, msg.alternatives ?? [msg.text], 'phone')
+      if (msg.type === 'audio') handleClip(new Blob([msg.data], { type: 'audio/wav' }), msg.seconds ?? 2)
+      if (msg.type === 'transcript') handleUtterance(msg.text)
     })
-  }, [isPhone, cameraSource])
+  }, [isPhone, usesPhone, p?.settings.micSource])
 
   if (isPhone) return <Phone code={route.params.code} />
+  if (!ready) return null
 
-  const path = ['/setup', '/build', '/blocks', '/log'].includes(route.path) ? route.path : hasBoard ? '/build' : '/setup'
   return (
-    <div className="app">
-      <Header route={path} navigate={navigate} />
-      {path === '/setup' && <Setup navigate={navigate} />}
-      {path === '/build' && <Build />}
-      {path === '/blocks' && <Blocks navigate={navigate} />}
-      {path === '/log' && <Log />}
-      {toast && <div className="toast">{toast}</div>}
-    </div>
+    <>
+      {page === 'workspace' && <Workspace navigate={navigate} />}
+      {page === 'setup' && p?.id === projectId && <Setup navigate={navigate} />}
+      {page === 'build' && p?.id === projectId && <Build navigate={navigate} />}
+      <LogSheet />
+      {toast && <div className="toast glass">{toast}</div>}
+    </>
   )
 }

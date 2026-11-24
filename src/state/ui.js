@@ -5,10 +5,13 @@ export const ui = createStore({
   key: null,
   storage: null,
   initial: {
-    highlightRef: null, // part highlighted by "where is C8?"
-    liveMode: 'zoom', // 'zoom' | 'crop' | 'calibrate'
-    checkRequest: 0, // bumped by the "check this" voice command
-    cropTap: null, // { cx, cy, nonce } last crop tap on the live view
+    railOpen: false,
+    highlightRef: null, // "where is C8?"
+    calibrating: null, // { refs: [a, b], taps: [] }
+    tapRequest: null, // { ref } — waiting for a tap on the video to crop (no calibration)
+    check: null, // { ref, status: 'capturing'|'checking'|'done'|'error', result, error }
+    review: null, // { status, items: [{ ref, status, result }], activeRef }
+    logOpen: false,
     toast: null,
   },
 })
@@ -16,7 +19,7 @@ export const ui = createStore({
 export const setUi = (patch) => ui.set((s) => ({ ...s, ...patch }))
 
 let toastTimer = null
-export function toast(text, ms = 3500) {
+export function toast(text, ms = 3000) {
   setUi({ toast: text })
   clearTimeout(toastTimer)
   toastTimer = setTimeout(() => setUi({ toast: null }), ms)

@@ -1,12 +1,14 @@
 import { createStore } from '../store.js'
-import { DEFAULT_TASKS } from '../../config/models.js'
+import { TASKS, STT, hasProvider } from '../../config/ai.js'
 
-// OpenRouter's public model list (no key needed): used for price data and for
-// auto-picking a free model when a configured default has been retired.
+// OpenRouter's public model list (no key needed): price data for the cost meter, and a
+// replacement when a configured model has been retired. Replacements are recorded and
+// shown in the log, never chosen silently.
 
-export const catalog = createStore({ key: 'catalog', initial: { fetchedAt: 0, models: [] } })
+export const catalog = createStore({ key: 'catalog', version: 2, initial: { fetchedAt: 0, models: [], overrides: {} } })
 
 const DAY = 24 * 60 * 60 * 1000
+const toNum = (v) => (v == null || v === '' || !Number.isFinite(Number(v)) || Number(v) < 0 ? null : Number(v))
 
 export async function loadOpenRouterCatalog({ force = false } = {}) {
   const c = catalog.get()
@@ -16,50 +18,47 @@ export async function loadOpenRouterCatalog({ force = false } = {}) {
   const json = await res.json()
   const models = (json.data ?? []).map((m) => ({
     id: m.id,
-    name: m.name ?? m.id,
-    inputs: m.architecture?.input_modalities ?? (m.architecture?.modality?.includes('image') ? ['text', 'image'] : ['text']),
+    inputs: m.architecture?.input_modalities ?? ['text'],
     prompt: toNum(m.pricing?.prompt),
     completion: toNum(m.pricing?.completion),
-    image: toNum(m.pricing?.image),
     request: toNum(m.pricing?.request),
     context: m.context_length ?? null,
   }))
-  catalog.set({ fetchedAt: Date.now(), models })
+  catalog.set((s) => ({ ...s, fetchedAt: Date.now(), models }))
   return models
 }
 
-function toNum(v) {
-  if (v == null || v === '') return null
-  const n = Number(v)
-  return Number.isFinite(n) && n >= 0 ? n : null
-}
+export const findModel = (id) => catalog.get().models.find((m) => m.id === id) ?? null
+const isFree = (m) => m.prompt === 0 && m.completion === 0
+const accepts = (m, kind) => kind === 'text' || m.inputs.includes(kind)
 
-export function findModel(id) {
-  return catalog.get().models.find((m) => m.id === id) ?? null
-}
-
-export const isFree = (m) => m && m.prompt === 0 && m.completion === 0
-export const acceptsImages = (m) => Boolean(m?.inputs?.includes('image'))
-
-/**
- * For each task whose chosen model is missing from the catalog, pick a free model with the
- * right input type. Returns { models, autoPicked } to merge into prefs.
- */
-export function autoPickModels(currentModels, models = catalog.get().models) {
-  if (!models.length) return { models: currentModels, autoPicked: {} }
-  const next = { ...currentModels }
-  const autoPicked = {}
-  for (const [task, cfg] of Object.entries(DEFAULT_TASKS)) {
-    const chosen = models.find((m) => m.id === next[task])
-    const ok = chosen && (!cfg.needsVision || acceptsImages(chosen))
-    if (ok) continue
-    const candidates = models
-      .filter((m) => isFree(m) && (!cfg.needsVision || acceptsImages(m)))
-      .sort((a, b) => (b.context ?? 0) - (a.context ?? 0))
-    if (candidates[0]) {
-      next[task] = candidates[0].id
-      autoPicked[task] = true
-    }
+/** Pick replacements for configured OpenRouter models that are no longer listed. */
+export function autoPick(models = catalog.get().models) {
+  if (!models.length) return {}
+  const wanted = [
+    ...Object.entries(TASKS).filter(([, t]) => t.provider === 'openrouter').map(([k, t]) => [k, t.model, t.needs]),
+    ...STT.engines.filter((e) => e.provider === 'openrouter').map((e) => ['stt', e.model, 'audio']),
+  ]
+  const overrides = {}
+  for (const [key, model, needs] of wanted) {
+    const listed = models.find((m) => m.id === model)
+    if (listed && accepts(listed, needs)) continue
+    const pool = models.filter((m) => accepts(m, needs))
+    const pick = pool.filter(isFree).sort((a, b) => (b.context ?? 0) - (a.context ?? 0))[0] ?? pool.sort((a, b) => (a.prompt ?? 1) - (b.prompt ?? 1))[0]
+    if (pick) overrides[key] = { from: model, to: pick.id }
   }
-  return { models: next, autoPicked }
+  catalog.set((s) => ({ ...s, overrides }))
+  return overrides
+}
+
+export const modelFor = (key, configured) => catalog.get().overrides[key]?.to ?? configured
+
+export async function refreshCatalog() {
+  if (!hasProvider('openrouter')) return
+  try {
+    await loadOpenRouterCatalog()
+    autoPick()
+  } catch {
+    // Offline or blocked: keep the configured models.
+  }
 }
