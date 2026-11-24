@@ -111,3 +111,9 @@ The cost chip at the top right opens the cost of each call type (speech, image, 
 ![Phone-only build](screenshots/17-phone-only-build.webp)
 
 With **Camera: This Device**, the whole app runs on one phone and the panels stack.
+
+## Dark appearance
+
+![Dark](screenshots/18-dark.webp)
+
+The same glass in Dark, chosen with the switch on the Projects page (Auto follows the system).
