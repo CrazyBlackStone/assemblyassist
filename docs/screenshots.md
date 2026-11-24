@@ -1,158 +1,103 @@
 # Assembly Assist: screenshots
 
-Every screen of the deployed app at https://crazyblackstone.github.io/assemblyassist/, captured in Chromium at 1440×900 (phone shots: iPhone 13 size).
+The live app at https://crazyblackstone.github.io/assemblyassist/, captured in Chromium at 1600×950 (phone shots at iPhone 13 size).
 
 How these were made:
-- **Board:** the bundled demo board (*ATtiny85 blinker*, 20 parts).
-- **AI:** no API key, so all AI results are in **simulated** mode. They are labeled "Simulated AI · no model was called" and cost $0. With a key, the same panels show the model name, time and real cost.
-- **Camera:** the live view is a synthetic image of the demo board, drawn from its pick-and-place file and fed in as a fake camera.
-- **Voice:** a scripted speech recognizer stands in for the microphone. The transcript panel shows exactly what it "heard".
-- **Pairing:** shots 18–20 show a real pairing between two browser windows through the PeerJS server.
+- **Board:** the bundled demo project (ATtiny85 blinker, 20 parts, Gerbers included).
+- **Camera:** a second browser acts as the phone and is paired with the laptop through the real pairing server. Its "camera" is a picture of the demo board, rendered from the demo Gerbers and tilted 4°.
+- **AI:** no key is configured, so AI results are simulated and labeled **SIM**. With a key they show **AI**, and real verdicts and costs.
+- **Voice:** a scripted recognizer stands in for the microphone.
 
----
+## Workspace
+
+![Projects](screenshots/01-workspace.webp)
+
+Each project card shows its board render and a progress ring. **New project** opens an empty setup.
 
 ## Setup
 
-### 1. First visit
-![Setup screen with no board loaded](screenshots/01-setup-empty.png)
+![Setup](screenshots/02-setup.webp)
 
-Four sections: board, camera and microphone, AI models, voice. The privacy note is at the top. With no key, the active provider is **Simulated**, so the app works without any setup.
-
-### 2. Uploading your own BOM and pick-and-place file
-![Board section after loading files](screenshots/14-setup-upload-files.png)
-
-After **Load files**, a green panel confirms what was loaded (parts, value groups, locations, DNP parts excluded) and offers **Start building →**. Problems with the files appear in a red box that names the file.
-
-### 3. Pairing the phone
-![QR code and pairing code](screenshots/15-setup-phone-pairing.png)
-
-Scan the QR code with the phone or type the 6-letter code. The status changes from *waiting* to *streaming*. **Show connection settings** holds the relay-server fields for an optional EC2 TURN or PeerServer.
-
-### 4. Hotspot help
-![Hotspot tips expanded](screenshots/16-setup-hotspot-tips.png)
-
-The short version of [phone-hotspot.md](phone-hotspot.md), for when campus Wi-Fi blocks the connection.
-
-### 5. AI models and keys
-![Provider, key and model per call](screenshots/17-setup-ai-models.png)
-
-One provider layer for all three calls. Choose the provider, paste a key (stored only in this browser, optionally only for this tab), and pick a model per call. The modality and price of each call are listed.
-
----
+- **Files:** drop Gerber (.zip or files), BOM and CPL.
+- **Preview and stats:** the board preview is rendered from the Gerbers, with part count, board size and layer count underneath.
+- **Options:** turn **Check soldering** off for solder-paste boards. Camera and microphone each come from the phone or this device. **Board orientation** turns the board view to match the bench.
+- **Phone:** scan the QR code with the phone to pair it.
+- **Order:** drag parts, or whole categories by their header. **Suggest** asks the model for an order, which you accept or keep.
 
 ## Build
 
-### 6. Current part, polarized
-![Build screen with U1, orientation diagram, live view and board map](screenshots/02-build-polarized-part.png)
+### Before the phone connects
 
-- **Part card:** large reference, value and package, readable from arm's length.
-- **Polarized parts:** a yellow border, the **POLARIZED: Pin 1 mark** badge, and an orientation diagram drawn from the footprint and pick-and-place rotation. **Placed** stays disabled until the orientation is confirmed.
-- **Live view:** digital zoom, and a ring on the current part once the overlay is calibrated with two taps.
-- **Board map:** drawn from the pick-and-place file.
+![Build screen waiting for the phone](screenshots/03-build-waiting-for-phone.webp)
 
-### 7. Voice: "where is C8?"
-![Voice transcript and board map highlight](screenshots/03-voice-where-is-c8.png)
+The camera panel shows the pairing QR code until a phone connects.
 
-The voice bar always shows what was heard (*"where is see eight"*) and how it was understood (*→ where C8*), so a misheard command is visible. The answer comes from the board data: it's spoken, shown on screen, and C8 is ringed on the board map.
+### On the phone
 
-### 8. Solder check: crop
-![Crop preview before sending](screenshots/04-check-crop-preview.png)
+![Phone connect](screenshots/04-phone-connect.webp) ![Phone streaming](screenshots/05-phone-streaming.webp)
 
-After **Check this part**, the user taps the part on the live view. The app takes a full-resolution still, crops around the tap and shows exactly what will be sent; the whole board is never sent. A local brightness and blur check warns before any call is spent.
+### Building
 
-### 9. Solder check: AI sees no problem
-![Looks right result](screenshots/05-check-ai-sees-no-problem.png)
+![Build screen](screenshots/06-build.webp)
 
-The result shows the image that was analysed, the verdict, the confidence and what the model saw. It never gives an all-clear: *"AI sees no problem, please confirm with your own eyes."* The user makes the final call with the **Your call** buttons.
+- **Rail:** the build order as ref des.
+- **Panel 1:** the current part, its package drawn as it sits on the board with the pin-1 dot lit, an arrow pointing to the mark, the next part, and Back / Skip / Next.
+- **Panel 2:** the board from the Gerbers, with the current part hovering in place.
+- **Panel 3:** the phone's camera.
+- **Bottom bar:** a placement tip for the package type.
 
-### 10. Solder check: possible problem, fix help, mark as wrong
-![Possible problem with fix steps and mark-as-wrong form](screenshots/06-check-possible-problem-fix-help.png)
+### Camera calibration
 
-- **Flagged issue:** a specific problem (*Bridged pins*). The issue chips let the user pick a different one.
-- **Fix help:** short steps for this part. Each step shows the technique-library entry it came from (*from: Remove a solder bridge with braid*), and the panel ends with a **Check** step.
-- **Mark as wrong:** asks what was actually right and writes an entry to the failure log.
+![Calibration](screenshots/07-calibrate.webp)
 
-### 11. Solder check: can't tell
-![Can't tell result with retake advice](screenshots/07-check-cant-tell.png)
+Tap the two highlighted parts on the video; the board view rings the same part. From then on, every check crops its part automatically.
 
-"Can't tell" is a full result, not an error. It comes with advice ("Zoom in closer and retake in better light") and a **Retake closer** button.
+### Check after each placement
 
-### 12. Block finished: multimeter checkpoint
-![Checkpoint banner](screenshots/08-build-checkpoint-banner.png)
+![No problem](screenshots/08-check-no-problem.webp)
 
-When every part in a block is handled, a banner asks for a multimeter check before moving on. The user can record it as done or skip it.
+After **Next**, the video blurs and the cropped part appears with orientation and solder verdicts. The best result is "AI sees no problem", and the user still confirms with **Good** or **✕**.
 
-### 13. Jump to any part
-![Part list grouped by block and value](screenshots/09-part-list.png)
+![Flipped](screenshots/09-check-flipped.webp)
 
-Parts are grouped by block, then by value, so identical parts sit together. Colours show placed, skipped, dropped and current parts. Tap any chip to jump to it.
+The crop is turned to the part's reference orientation, so the model is told exactly where the mark must be. A flipped part shows in red on the board until it is fixed.
 
-### 14. Dropped part and tray compartment
-![C8 dropped, tray number and spares](screenshots/12-build-dropped-part-tray.png)
+![Can't tell](screenshots/10-check-cant-tell.webp)
 
-*"I dropped it"* marks C8 as needing a replacement and reports the spares the BOM lists (*2 spares for 100nF; 1 left*). The big yellow **Tray** label shows which compartment holds the part.
+### Voice
 
-### 15. Laptop with the phone streaming
-![Build screen fed by the paired phone](screenshots/20-build-with-paired-phone.png)
+![Voice command](screenshots/11-voice-command.webp)
 
-The header shows **Phone: streaming**, and the live view is the phone's camera.
+Short commands such as "do the LEDs next" are handled locally and reorder the build at once.
 
----
+![Voice assistant](screenshots/12-voice-assistant.webp)
 
-## Blocks
+Anything else goes to the language model. Answers cite the technique-library entry they came from, and the thumbs-down logs a wrong answer.
 
-### 16. AI build plan proposal
-![Proposed build plan](screenshots/10-blocks-ai-plan-proposal.png)
+### Reordering
 
-The language model proposes blocks, each with a one-line reason. The app checks the plan against the BOM before showing it: every part must appear exactly once, and any invented part is removed and logged. The user can accept it or keep the current order.
+![Order drawer](screenshots/13-order-drawer.webp)
 
-### 17. Blocks, checkpoints and tray mode
-![Block list with checkpoints and tray table](screenshots/11-blocks-checkpoints-and-tray.png)
+Tapping the rail opens the full list, where parts and categories can be dragged mid-build.
 
-- **Blocks:** in build order, with arrows to reorder them. AI-written names and reasons carry the AI label.
-- **Checkpoints:** the status of each block's multimeter check.
-- **Tray mode:** numbers each value group's compartment, so *"where are the 100nF?"* answers with the compartment number.
+### Done: review every part
 
----
+![Review running](screenshots/14-review-running.webp)
 
-## Log
+**Done** takes one photo, crops every placed part and checks them in order. Each part lights up on the board as its check runs.
 
-### 18. Cost and failure log
-![Cost per call type and failure log](screenshots/13-log-cost-and-failures.png)
+![Review finished](screenshots/15-review-done.webp)
 
-- **Cost:** a running total with calls, failures, tokens and cost for each call type. A model with no price data shows "unknown", never $0.
-- **Failure log:** every time a model was wrong, slow, failed or was corrected by the app. Each entry records the input, what the model said, what the user says was right, and what the UI did. Exports to JSON or CSV for the report.
+Tap a tile to see its verdicts.
 
-The cost meter in the header is visible on every screen.
+## Cost and failure log
 
----
+![Log](screenshots/16-log.webp)
 
-## Phone
+The cost chip in the top bar opens the cost of each call type (speech, image, language), any model replacements, and the failure log with JSON/CSV export.
 
-### 19. Phone: enter the code
-![Phone pairing page](screenshots/18-phone-enter-code.png)
+## Phone-only mode
 
-The page the QR code opens. The code is pre-filled from the link.
+![Phone-only build](screenshots/17-phone-only-build.webp)
 
-### 20. Phone: streaming
-![Phone connected and streaming](screenshots/19-phone-streaming.png)
-
-The phone shows its camera preview, a big **Talk** button, a hands-free toggle and the torch. Voice commands said here are sent to the laptop.
-
-### 21. Phone-only mode
-![Build screen on a phone](screenshots/21-phone-only-build.png)
-
-For testing without a laptop: open the site on the phone and choose **This device's camera** in Setup. The layout stacks into one column.
-
----
-
-## Retaking the screenshots
-
-The capture script and fake camera are not in the repo. The steps were:
-
-1. Draw the demo board from `src/data/demo/demo-pnp.csv` into a 1280×720 image.
-2. Convert it to a `.y4m` video with ffmpeg.
-3. Launch Chromium with `--use-fake-device-for-media-stream --use-file-for-fake-video-capture=board.y4m`.
-4. Replace `SpeechRecognition` with a scripted fake, then drive each screen with Playwright.
-
-Ask Claude to add the script to `scripts/` if you want to rerun it yourselves.
+With **Camera: This device**, the whole app runs on one phone and the panels stack.
