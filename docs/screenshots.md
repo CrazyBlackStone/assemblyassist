@@ -12,17 +12,17 @@ How these were made:
 
 ![Projects](screenshots/01-workspace.webp)
 
-Each project card shows its board render and a progress ring. **New project** opens an empty setup.
+Each project is a glass card with its board render and a progress bar. **New Project** opens an empty setup. The **Light / Dark / Auto** switch sets the appearance (light by default).
 
 ## Setup
 
 ![Setup](screenshots/02-setup.webp)
 
-- **Files:** drop Gerber (.zip or files), BOM and CPL.
-- **Preview and stats:** the board preview is rendered from the Gerbers, with part count, board size and layer count underneath.
-- **Options:** turn **Check soldering** off for solder-paste boards. Camera and microphone each come from the phone or this device. **Board orientation** turns the board view to match the bench.
+- **Board:** the project name, then one row each for **Gerbers** (.zip or files), **Placement** (CPL) and **Bill of Materials**. Tap a row to pick a file, or drop files on it.
+- **Preview:** the board in 3D, rendered from the Gerbers, with part count, board size and layer count underneath. **Show Back** flips it.
+- **Assembly:** turn **Check Soldering** off for solder-paste boards. **Camera** and **Microphone** each come from the phone or this device. **Board Orientation** turns the board view to match the bench.
 - **Phone:** scan the QR code with the phone to pair it.
-- **Order:** drag parts, or whole categories by their header. **Suggest** asks the model for an order, which you accept or keep.
+- **Build Order:** drag parts, or whole categories by their name. **Suggest Order** asks the model for an order, which you accept or keep.
 
 ## Build
 
@@ -41,7 +41,7 @@ The camera panel shows the pairing QR code until a phone connects.
 ![Build screen](screenshots/06-build.webp)
 
 - **Rail:** the build order as ref des.
-- **Panel 1:** the current part, its package drawn as it sits on the board with the pin-1 dot lit, an arrow pointing to the mark, the next part, and Back / Skip / Next.
+- **Panel 1:** the current part, its package drawn as it sits on the board with the pin-1 dot lit, an arrow pointing to the mark, **Up Next**, and Back / Skip / Next.
 - **Panel 2:** the board in 3D, textured from the Gerbers, with the current part hovering over its spot.
 - **Panel 3:** the phone's camera.
 - **Bottom bar:** a placement tip for the package type.
@@ -62,7 +62,7 @@ Tap the two highlighted parts on the video; the board view rings the same part. 
 
 ![No problem](screenshots/08-check-no-problem.webp)
 
-After **Next**, the video blurs and the cropped part appears with orientation and solder verdicts. The best result is "AI sees no problem", and the user still confirms with **Good** or **✕**.
+After **Next**, the video blurs and the cropped part appears on a glass card with orientation and solder verdicts. The best result is "AI sees no problem", and the user still confirms with **Looks Good** or **✕**.
 
 ![Flipped](screenshots/09-check-flipped.webp)
 
@@ -104,10 +104,10 @@ Tap a tile to see its verdicts.
 
 ![Log](screenshots/16-log.webp)
 
-The cost chip in the top bar opens the cost of each call type (speech, image, language), any model replacements, and the failure log with JSON/CSV export.
+The cost chip at the top right opens the cost of each call type (speech, image, language), any model replacements, and the failure log with JSON/CSV export.
 
 ## Phone-only mode
 
 ![Phone-only build](screenshots/17-phone-only-build.webp)
 
-With **Camera: This device**, the whole app runs on one phone and the panels stack.
+With **Camera: This Device**, the whole app runs on one phone and the panels stack.

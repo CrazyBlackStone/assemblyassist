@@ -37,13 +37,17 @@ export function Build({ navigate }) {
   if (!p) return null
   if (!p.board || !p.plan) {
     return (
-      <main className="workspace" style={{ textAlign: 'center', paddingTop: '20vh' }}>
-        <h1>Add the board files first</h1>
-        <p>
-          <button className="btn primary xl" onClick={() => navigate(`/p/${p.id}/setup`)}>
-            Open setup
+      <main className="workspace">
+        <div className="empty-state" style={{ paddingTop: '18vh' }}>
+          <Icon name="layers" className="ico" />
+          <div className="t-title2" style={{ color: 'var(--label)' }}>
+            Add the Board Files First
+          </div>
+          <div>The build needs a placement file (and ideally the Gerbers).</div>
+          <button className="btn primary" onClick={() => navigate(`/p/${p.id}/setup`)}>
+            Open Setup
           </button>
-        </p>
+        </div>
       </main>
     )
   }
@@ -53,26 +57,32 @@ export function Build({ navigate }) {
 
   return (
     <div className="build">
-      <header className="topbar glass">
-        <button className="btn icon ghost" onClick={() => navigate('/')} aria-label="Projects">
-          <Icon name="back" />
-        </button>
-        <span className="title">{p.name}</span>
-        <button className="btn icon sm ghost" onClick={() => navigate(`/p/${p.id}/setup`)} aria-label="Setup" title="Setup">
-          <Icon name="list" />
-        </button>
-        <span className="spacer" />
-        <div className="progress-pill" aria-label={`${pr.placed} of ${pr.total} placed`}>
-          <div className="track">
-            <div className="fill" style={{ width: `${(pr.placed / Math.max(1, pr.total)) * 100}%` }} />
-          </div>
-          {pr.placed}/{pr.total}
+      <header className="navbar">
+        <div className="lead">
+          <button className="btn back-btn" onClick={() => navigate('/')}>
+            <Icon name="back" /> Projects
+          </button>
         </div>
-        <span className="spacer" />
-        <CostChip />
-        <button className={`btn ${pr.pending === 0 ? 'primary' : ''}`} onClick={runReview} disabled={reviewing || pr.placed === 0}>
-          <Icon name="done" /> Done
-        </button>
+        <div className="center pill">
+          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.name}</span>
+          <div className="progress-pill" aria-label={`${pr.placed} of ${pr.total} placed`}>
+            <div className="track">
+              <div className="fill" style={{ width: `${(pr.placed / Math.max(1, pr.total)) * 100}%` }} />
+            </div>
+            <span className="muted">
+              {pr.placed} of {pr.total}
+            </span>
+          </div>
+        </div>
+        <div className="trail">
+          <button className="btn icon sm plain" onClick={() => navigate(`/p/${p.id}/setup`)} aria-label="Setup" title="Setup">
+            <Icon name="sliders" />
+          </button>
+          <CostChip />
+          <button className={`btn sm ${pr.pending === 0 ? 'primary' : 'tinted'}`} onClick={runReview} disabled={reviewing || pr.placed === 0} title="Check every placed part">
+            <Icon name="done" /> Done
+          </button>
+        </div>
       </header>
 
       <main className="stage">
@@ -94,7 +104,7 @@ export function Build({ navigate }) {
               />
             </Suspense>
           ) : (
-            <div className="empty-cam muted">No positions: add a CPL file to see the board.</div>
+            <div className="empty-cam muted">No positions yet. Add a placement file to see the board.</div>
           )}
           <div className="corner br">
             <button className="btn icon sm" onClick={() => dispatch({ type: 'setting', key: 'viewRotation', value: ((p.settings.viewRotation ?? 0) + 90) % 360 })} aria-label="Turn board view" title="Turn board view 90°">

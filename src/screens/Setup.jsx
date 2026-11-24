@@ -17,17 +17,18 @@ const BoardView3D = lazy(() => import('../components/BoardView3D.jsx'))
 
 // No accept filters: Allegro (.art), Altium (.GTL, .TXT drill), Eagle (.cmp) and others all
 // use different extensions; files are identified by content instead.
-const TILES = [
-  { key: 'gerber', label: 'Gerber', hint: 'fab .zip or files', multiple: true },
-  { key: 'cpl', label: 'CPL', hint: 'pick-and-place' },
-  { key: 'bom', label: 'BOM', hint: 'optional' },
+const FILE_ROWS = [
+  { key: 'gerber', label: 'Gerbers', hint: 'Fab .zip or layer files', icon: 'layers', color: 'var(--green)', multiple: true },
+  { key: 'cpl', label: 'Placement', hint: 'Pick-and-place (CPL)', icon: 'pin', color: 'var(--blue)' },
+  { key: 'bom', label: 'Bill of Materials', hint: 'Optional', icon: 'table', color: 'var(--orange)' },
 ]
 
-function DropTile({ tile, file, error, busy, onFiles }) {
+/** A Settings-style row that is also a file picker and a drop target. */
+function FileRow({ row, file, error, busy, onFiles }) {
   const [over, setOver] = useState(false)
   return (
     <label
-      className={`drop ${over ? 'over' : ''} ${file && !error ? 'done' : ''} ${error ? 'err' : ''}`}
+      className={`row has-icon button ${over ? 'drop-over' : ''}`}
       onDragOver={(e) => (e.preventDefault(), setOver(true))}
       onDragLeave={() => setOver(false)}
       onDrop={(e) => {
@@ -36,10 +37,18 @@ function DropTile({ tile, file, error, busy, onFiles }) {
         onFiles([...e.dataTransfer.files])
       }}
     >
-      <input type="file" multiple={tile.multiple} onChange={(e) => onFiles([...e.target.files])} />
-      {busy ? <div className="spinner" /> : <Icon name={file && !error ? 'check' : 'upload'} />}
-      <span className="big">{tile.label}</span>
-      <span className="file">{error ? <span className="err-text">{error}</span> : (file ?? tile.hint)}</span>
+      <input type="file" multiple={row.multiple} onChange={(e) => onFiles([...e.target.files])} aria-label={row.label} />
+      <span className="row-icon" style={{ background: row.color }}>
+        <Icon name={row.icon} />
+      </span>
+      <span className="row-main">
+        <span className="row-title">{row.label}</span>
+        <span className="row-sub">{error ? <span className="err-text t-footnote">{error}</span> : (file ?? row.hint)}</span>
+      </span>
+      <span className="row-trail">
+        {busy ? <span className="spinner" /> : file && !error ? <Icon name="check" className="ico ok-mark" /> : <span>Choose</span>}
+        <Icon name="chevron" className="ico chev" />
+      </span>
     </label>
   )
 }
@@ -85,95 +94,141 @@ export function Setup({ navigate }) {
 
   return (
     <div>
-      <header className="topbar glass">
-        <button className="btn icon ghost" onClick={() => navigate('/')} aria-label="Projects">
-          <Icon name="back" />
-        </button>
-        <input
-          className="title"
-          value={p.name}
-          onChange={(e) => dispatch({ type: 'rename', name: e.target.value })}
-          aria-label="Project name"
-          style={{ background: 'transparent', border: 0, outline: 'none', minWidth: 0, flex: 1 }}
-        />
-        <CostChip />
-        <button className="btn primary" disabled={!ready} onClick={() => navigate(`/p/${p.id}/build`)}>
-          Start <Icon name="next" />
-        </button>
+      <header className="navbar">
+        <div className="lead">
+          <button className="btn back-btn" onClick={() => navigate('/')}>
+            <Icon name="back" /> Projects
+          </button>
+        </div>
+        <div className="center">{p.name}</div>
+        <div className="trail">
+          <CostChip />
+          <button className="btn primary sm" disabled={!ready} onClick={() => navigate(`/p/${p.id}/build`)}>
+            Start Building
+          </button>
+        </div>
       </header>
 
       <main className="setup">
         <div className="col">
-          <section className="section glass">
-            <h2>Files</h2>
-            <div className="drops">
-              {TILES.map((t) => (
-                <DropTile key={t.key} tile={t} file={fileLabel[t.key]} error={errors[t.key]} busy={busy === t.key} onFiles={(l) => onFiles(t.key, l)} />
+          <section className="group">
+            <h2 className="section-title">Board</h2>
+            <div className="list">
+              <label className="row">
+                <span className="row-title">Name</span>
+                <input className="row-input" value={p.name} onChange={(e) => dispatch({ type: 'rename', name: e.target.value })} aria-label="Project name" />
+              </label>
+              {FILE_ROWS.map((r) => (
+                <FileRow key={r.key} row={r} file={fileLabel[r.key]} error={errors[r.key]} busy={busy === r.key} onFiles={(l) => onFiles(r.key, l)} />
               ))}
-            </div>
-            {p.render && (
-              <div className="preview" style={{ position: 'relative' }}>
-                <Suspense fallback={<div className="empty-cam"><div className="spinner" /></div>}>
-                  <BoardView3D project={{ ...p, current: null }} side={previewSide} compact onFlip={null} />
-                </Suspense>
-                {hasBack && (
-                  <div className="corner tr">
-                    <button className="btn sm" onClick={() => setPreviewSide(previewSide === 'top' ? 'bottom' : 'top')}>
-                      <Icon name="flip" /> {previewSide === 'top' ? 'Back' : 'Front'}
-                    </button>
-                  </div>
-                )}
-              </div>
-            )}
-            {p.files.gerbers.length > 0 && <LayerList files={p.files} />}
-            {p.board && (
-              <div className="stats">
-                <span className="chip">{Object.keys(p.board.parts).length} parts</span>
-                {p.render && (
-                  <span className="chip">
-                    {p.render.size.w.toFixed(0)} × {p.render.size.h.toFixed(0)} mm
+              {p.files.netlist && (
+                <div className="row has-icon">
+                  <span className="row-icon" style={{ background: 'var(--purple)' }}>
+                    <Icon name="net" />
                   </span>
-                )}
-                {p.render?.layers?.length > 0 && <span className="chip">{p.render.layers.length} layers</span>}
-                {p.board.excluded.length > 0 && <span className="chip">{p.board.excluded.length} DNP</span>}
-                {!p.render?.svg && <span className="chip">No Gerber: outline from parts</span>}
-              </div>
-            )}
-            {notes.length > 0 && (
-              <details className="note">
-                <summary>{notes.length} note{notes.length > 1 ? 's' : ''}</summary>
-                <ul>
-                  {notes.map((n, i) => (
-                    <li key={i}>{n}</li>
-                  ))}
-                </ul>
-              </details>
-            )}
+                  <span className="row-main">
+                    <span className="row-title">Netlist</span>
+                    <span className="row-sub">{p.files.netlist.name} · real pad positions</span>
+                  </span>
+                  <span className="row-trail">
+                    <Icon name="check" className="ico ok-mark" />
+                  </span>
+                </div>
+              )}
+            </div>
+            <p className="section-foot">Drop the fab zip from any EDA tool (KiCad, Altium, Allegro, Eagle). Layers are recognised from their contents, and a CPL, BOM or netlist inside the zip is picked up too.</p>
           </section>
 
-          <section className="section glass">
-            <div className="option">
-              <div>
-                <div className="label">Check soldering</div>
-                <div className="sub">Turn off when using solder paste</div>
+          {(p.render || p.board) && (
+            <section className="group">
+              <div className="section-title">
+                Preview
+                <span className="spacer" />
+                {hasBack && p.render && (
+                  <button className="btn sm tinted" onClick={() => setPreviewSide(previewSide === 'top' ? 'bottom' : 'top')}>
+                    <Icon name="flip" /> {previewSide === 'top' ? 'Show Back' : 'Show Front'}
+                  </button>
+                )}
               </div>
-              <Switch checked={s.verifySoldering} onChange={(v) => dispatch({ type: 'setting', key: 'verifySoldering', value: v })} label="Check soldering" />
-            </div>
-            <div className="option">
-              <div className="label">Camera</div>
-              <Seg value={s.cameraSource} options={[['phone', 'Phone'], ['local', 'This device']]} onChange={(v) => dispatch({ type: 'setting', key: 'cameraSource', value: v })} />
-            </div>
-            <div className="option">
-              <div className="label">Microphone</div>
-              <Seg value={s.micSource} options={[['laptop', 'Laptop'], ['phone', 'Phone']]} onChange={(v) => dispatch({ type: 'setting', key: 'micSource', value: v })} />
-            </div>
-            <div className="option">
-              <div>
-                <div className="label">Board orientation</div>
-                <div className="sub">Match how the board sits in front of you</div>
+              {p.render && (
+                <div className="preview">
+                  <Suspense fallback={<div className="empty-cam"><div className="spinner" /></div>}>
+                    <BoardView3D project={{ ...p, current: null }} side={previewSide} compact onFlip={null} />
+                  </Suspense>
+                </div>
+              )}
+              {p.board && (
+                <div className="layers">
+                  <span className="chip">{Object.keys(p.board.parts).length} parts</span>
+                  {p.render && (
+                    <span className="chip">
+                      {p.render.size.w.toFixed(0)} × {p.render.size.h.toFixed(0)} mm
+                    </span>
+                  )}
+                  {p.render?.layers?.length > 0 && <span className="chip">{p.render.layers.length} layers</span>}
+                  {p.board.excluded.length > 0 && <span className="chip">{p.board.excluded.length} DNP</span>}
+                  {!p.render?.svg && <span className="chip">No Gerbers: outline from parts</span>}
+                </div>
+              )}
+              {p.files.gerbers.length > 0 && <LayerList files={p.files} />}
+              {notes.length > 0 && (
+                <details className="section-foot">
+                  <summary className="note" style={{ cursor: 'pointer' }}>
+                    {notes.length} note{notes.length > 1 ? 's' : ''} about these files
+                  </summary>
+                  <ul style={{ margin: '6px 0 0', paddingLeft: 18 }}>
+                    {notes.map((n, i) => (
+                      <li key={i}>{n}</li>
+                    ))}
+                  </ul>
+                </details>
+              )}
+            </section>
+          )}
+
+          <section className="group">
+            <h2 className="section-title">Assembly</h2>
+            <div className="list">
+              <div className="row has-icon">
+                <span className="row-icon" style={{ background: 'var(--orange)' }}>
+                  <Icon name="flame" />
+                </span>
+                <span className="row-main">
+                  <span className="row-title">Check Soldering</span>
+                  <span className="row-sub">Turn off when using solder paste</span>
+                </span>
+                <Switch checked={s.verifySoldering} onChange={(v) => dispatch({ type: 'setting', key: 'verifySoldering', value: v })} label="Check soldering" />
               </div>
-              <button className="btn" onClick={() => dispatch({ type: 'setting', key: 'viewRotation', value: ((s.viewRotation ?? 0) + 90) % 360 })}>
-                <Icon name="rotate" /> {s.viewRotation ?? 0}°
+              <div className="row has-icon">
+                <span className="row-icon" style={{ background: 'var(--blue)' }}>
+                  <Icon name="camera" />
+                </span>
+                <span className="row-main">
+                  <span className="row-title">Camera</span>
+                </span>
+                <Seg value={s.cameraSource} options={[['phone', 'Phone'], ['local', 'This Device']]} onChange={(v) => dispatch({ type: 'setting', key: 'cameraSource', value: v })} />
+              </div>
+              <div className="row has-icon">
+                <span className="row-icon" style={{ background: 'var(--red)' }}>
+                  <Icon name="mic" />
+                </span>
+                <span className="row-main">
+                  <span className="row-title">Microphone</span>
+                </span>
+                <Seg value={s.micSource} options={[['laptop', 'Laptop'], ['phone', 'Phone']]} onChange={(v) => dispatch({ type: 'setting', key: 'micSource', value: v })} />
+              </div>
+              <button className="row has-icon button" style={{ width: '100%', border: 0, background: 'transparent', textAlign: 'left' }} onClick={() => dispatch({ type: 'setting', key: 'viewRotation', value: ((s.viewRotation ?? 0) + 90) % 360 })}>
+                <span className="row-icon" style={{ background: 'var(--label-2)' }}>
+                  <Icon name="rotate" />
+                </span>
+                <span className="row-main">
+                  <span className="row-title">Board Orientation</span>
+                  <span className="row-sub">Match how the board sits in front of you</span>
+                </span>
+                <span className="row-trail tnum">
+                  {s.viewRotation ?? 0}°
+                  <Icon name="chevron" className="ico chev" />
+                </span>
               </button>
             </div>
           </section>
@@ -196,12 +251,12 @@ function LayerList({ files }) {
   const sideName = (s) => (s === 'top' ? 'Top' : s === 'bottom' ? 'Bottom' : '')
   const layers = [...files.gerbers].sort((a, b) => ORDER.indexOf(a.type) - ORDER.indexOf(b.type))
   return (
-    <details className="layers-box">
-      <summary className="faint" style={{ fontSize: '0.85rem', cursor: 'pointer' }}>
-        {layers.length} layers{files.netlist ? ' · netlist' : ''}
-        {files.unused?.length ? ` · ${files.unused.length} not used` : ''}
+    <details className="section-foot">
+      <summary style={{ cursor: 'pointer' }}>
+        {layers.length} layers recognised{files.netlist ? ', plus a netlist' : ''}
+        {files.unused?.length ? ` · ${files.unused.length} files not used` : ''}
       </summary>
-      <div className="layers" style={{ marginTop: 8 }}>
+      <div className="layers" style={{ marginTop: 8, padding: 0 }}>
         {layers.map((l) => (
           <span key={l.name} className="chip" title={l.name}>
             <b>
@@ -237,21 +292,28 @@ function PhonePair() {
   }, [url])
   const ok = pair.status === 'paired'
   return (
-    <section className="section glass">
-      <div className="pair">
-        {qr && <img className="qr" src={qr} alt="Scan with the phone" />}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-          <h2>Phone</h2>
-          <div className="code">{pair.code ?? '······'}</div>
-          <span className="chip" style={{ alignSelf: 'flex-start', color: ok ? 'var(--ok)' : undefined }}>
-            <span className={`dot ${ok ? 'placed' : ''}`} /> {ok ? 'Streaming' : pair.status === 'linked' ? 'Linked' : 'Waiting'}
-          </span>
-          {pair.error && <span className="err-text">{pair.error}</span>}
-          <a className="faint" style={{ fontSize: '0.8rem' }} href="https://github.com/CrazyBlackStone/assemblyassist/blob/main/docs/phone-hotspot.md" target="_blank" rel="noreferrer">
-            Won’t connect? Use the phone’s hotspot
-          </a>
+    <section className="group">
+      <h2 className="section-title">Phone</h2>
+      <div className="list">
+        <div className="pair">
+          {qr && <img className="qr" src={qr} alt="Scan with the phone" />}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6, minWidth: 0 }}>
+            <span className="t-subhead muted">Scan with the phone’s camera, or enter the code on the phone.</span>
+            <div className="code">{pair.code ?? '······'}</div>
+            <span className="t-subhead" style={{ display: 'inline-flex', alignItems: 'center', gap: 8, color: ok ? 'var(--green)' : 'var(--label-2)', fontWeight: 600 }}>
+              <span className={`status-dot ${ok ? 'on' : ''}`} /> {ok ? 'Streaming' : pair.status === 'linked' ? 'Linked' : 'Waiting for phone'}
+            </span>
+            {pair.error && <span className="err-text">{pair.error}</span>}
+          </div>
         </div>
       </div>
+      <p className="section-foot">
+        Won’t connect?{' '}
+        <a href="https://github.com/CrazyBlackStone/assemblyassist/blob/main/docs/phone-hotspot.md" target="_blank" rel="noreferrer" style={{ color: 'var(--blue)', textDecoration: 'none' }}>
+          Use the phone’s hotspot
+        </a>
+        . Don’t point the camera at confidential designs.
+      </p>
     </section>
   )
 }
@@ -260,9 +322,16 @@ function OrderSection({ p }) {
   const ai = useAiTask(OrderPlan.TASK)
   if (!p.plan) {
     return (
-      <section className="section glass">
-        <h2>Order</h2>
-        <p className="muted">Add a BOM to see the parts.</p>
+      <section className="group">
+        <h2 className="section-title">Build Order</h2>
+        <div className="list">
+          <div className="row">
+            <span className="row-main">
+              <span className="row-title muted">No parts yet</span>
+              <span className="row-sub">Add a placement file or BOM to see the parts.</span>
+            </span>
+          </div>
+        </div>
       </section>
     )
   }
@@ -276,28 +345,28 @@ function OrderSection({ p }) {
       fallbackAction: 'Kept the current order.',
     })
   return (
-    <section className="section glass">
-      <div className="card-row">
-        <h2>Order</h2>
-        <span className="faint" style={{ fontSize: '0.85rem' }}>
-          Drag to reorder
-        </span>
+    <section className="group">
+      <div className="section-title">
+        Build Order
         <span className="spacer" />
         {p.plan.source !== 'default' && (
-          <button className="btn sm ghost" onClick={() => dispatch({ type: 'set-plan', plan: defaultPlan(p.board) })}>
+          <button className="btn sm plain" onClick={() => dispatch({ type: 'set-plan', plan: defaultPlan(p.board) })}>
             Reset
           </button>
         )}
-        <button className="btn sm" onClick={suggest} disabled={ai.status === 'loading'}>
-          {ai.status === 'loading' ? <span className="spinner" style={{ width: 16, height: 16, borderWidth: 2 }} /> : <Icon name="spark" />} Suggest
+        <button className="btn sm tinted" onClick={suggest} disabled={ai.status === 'loading'}>
+          {ai.status === 'loading' ? <span className="spinner" style={{ width: 16, height: 16, borderWidth: 2 }} /> : <Icon name="spark" />} Suggest Order
         </button>
       </div>
-      {ai.status === 'error' && <div className="err-text">Suggestion failed: {ai.error}</div>}
+      <p className="section-foot" style={{ marginTop: -2 }}>
+        Drag parts, or whole categories by their name.
+      </p>
+      {ai.status === 'error' && <div className="err-text" style={{ padding: '0 16px' }}>Suggestion failed: {ai.error}</div>}
       {ai.status === 'done' && (
-        <div className="cat" style={{ padding: 14, display: 'flex', flexDirection: 'column', gap: 10 }}>
+        <div className="cat" style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 10, boxShadow: '0 0 0 1.5px var(--tint), var(--shadow)' }}>
           <div className="card-row">
             <AiBadge simulated={ai.meta.simulated} />
-            <b>Suggested order</b>
+            <span className="t-headline">Suggested Order</span>
             <span className="spacer" />
             <MarkWrong
               task="orderPlan"
@@ -309,21 +378,22 @@ function OrderSection({ p }) {
             />
           </div>
           {ai.data.categories.map((c, i) => (
-            <div key={c.id} style={{ fontSize: '0.9rem' }}>
+            <div key={c.id} className="t-subhead">
               <b>
                 {i + 1}. {c.name}
               </b>{' '}
               <span className="muted">{c.reason}</span>
-              <div className="faint">{c.refs.join(' ')}</div>
+              <div className="faint t-footnote">{c.refs.join(' ')}</div>
             </div>
           ))}
           {ai.issues.length > 0 && <div className="note">App fixed: {ai.issues.join(' ')}</div>}
           <div className="card-row">
-            <button className="btn ok sm" onClick={() => (dispatch({ type: 'set-plan', plan: { ...ai.data, source: ai.meta.simulated ? 'simulated' : 'ai', model: ai.meta.model } }), ai.reset())}>
-              Use it
-            </button>
+            <span className="spacer" />
             <button className="btn sm" onClick={ai.reset}>
-              Keep mine
+              Keep Mine
+            </button>
+            <button className="btn primary sm" onClick={() => (dispatch({ type: 'set-plan', plan: { ...ai.data, source: ai.meta.simulated ? 'simulated' : 'ai', model: ai.meta.model } }), ai.reset())}>
+              Use This Order
             </button>
           </div>
         </div>

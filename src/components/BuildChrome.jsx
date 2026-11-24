@@ -21,6 +21,14 @@ export function BomRail({ project }) {
   useEffect(() => {
     curRef.current?.scrollIntoView({ block: 'center', behavior: 'smooth' })
   }, [project.current])
+  useEffect(() => {
+    if (!open) return
+    const onKey = (e) => {
+      if (e.key === 'Escape') setUi({ railOpen: false })
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [open])
   return (
     <>
       <nav className="rail glass" onClick={() => setUi({ railOpen: true })} aria-label="Build order (tap to edit)">
@@ -41,12 +49,15 @@ export function BomRail({ project }) {
           <div style={{ position: 'fixed', inset: 0, zIndex: 19 }} onClick={() => setUi({ railOpen: false })} />
           <aside className="drawer glass" aria-label="Build order">
             <div className="card-row">
-              <h2>Order</h2>
+              <h2 className="t-title2">Build Order</h2>
               <span className="spacer" />
-              <button className="btn icon sm" onClick={() => setUi({ railOpen: false })} aria-label="Close">
-                <Icon name="x" />
+              <button className="btn sm plain" onClick={() => setUi({ railOpen: false })}>
+                Done
               </button>
             </div>
+            <p className="section-foot" style={{ padding: '0 4px', marginTop: -6 }}>
+              Tap a part to jump to it. Drag to reorder.
+            </p>
             <BomList
               plan={project.plan}
               board={project.board}
@@ -120,7 +131,7 @@ export function VoiceBar({ project }) {
               )}
             </>
           ) : (
-            <span className="faint">{cat ? cat.name : 'Hold the mic or press T'}</span>
+            <span className="faint">{cat ? cat.name : 'Hold the mic or press T to talk'}</span>
           )}
         </div>
         <div className="vsay">
@@ -148,7 +159,7 @@ export function VoiceBar({ project }) {
         {v.error && <div className="err-text">{v.error}</div>}
       </div>
       <button className={`btn sm ${v.handsFree ? 'on' : ''}`} onClick={() => setHandsFree(!v.handsFree)} aria-pressed={v.handsFree} title="Listen without holding the button">
-        {v.handsFree ? 'Hands-free on' : 'Hands-free'}
+        {v.handsFree ? 'Listening' : 'Hands-Free'}
       </button>
     </footer>
   )

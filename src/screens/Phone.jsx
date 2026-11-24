@@ -114,13 +114,20 @@ export function Phone({ code: initialCode }) {
   if (!stream) {
     return (
       <main className="phone">
-        <h1 style={{ fontSize: '1.8rem', marginTop: 24 }}>Phone camera</h1>
-        <p className="muted">Prop the phone 15–25 cm above the board, camera down.</p>
+        <div style={{ marginTop: 32 }}>
+          <div className="t-footnote muted" style={{ fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.02em' }}>
+            Assembly Assist
+          </div>
+          <h1 className="t-large">Phone Camera</h1>
+        </div>
+        <p className="muted" style={{ margin: 0 }}>
+          Enter the code shown on the laptop, then prop the phone 15–25 cm above the board, camera down.
+        </p>
         <input className="code-input" value={code} maxLength={6} onChange={(e) => setCode(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ''))} aria-label="Pairing code" />
         <button className="btn primary xl" disabled={code.length !== 6} onClick={start}>
           Connect
         </button>
-        <p className="faint" style={{ fontSize: '0.8rem' }}>
+        <p className="section-foot" style={{ textAlign: 'center' }}>
           Don’t point the camera at confidential designs. Nothing is recorded.
         </p>
         {error && <p className="err-text">{error}</p>}
@@ -131,10 +138,10 @@ export function Phone({ code: initialCode }) {
   const ok = pair.status === 'paired'
   return (
     <main className="phone">
-      <div className={`status glass ${ok ? 'ok' : ''}`}>{ok ? 'Connected' : `Connecting to ${code}…`}</div>
+      <div className={`status ${ok ? 'ok' : ''}`}>{ok ? 'Connected' : `Connecting to ${code}…`}</div>
       {pair.error && <p className="err-text">{pair.error}</p>}
       <video ref={videoRef} muted playsInline autoPlay />
-      {status && <div style={{ textAlign: 'center', fontSize: '1.6rem', fontWeight: 800 }}>{status}</div>}
+      {status && <div className="t-title1" style={{ textAlign: 'center' }}>{status}</div>}
       {micOn && (
         <>
           <button className={`mic ${talking ? 'live' : ''} ${handsFree ? 'armed' : ''}`} onPointerDown={down} onPointerUp={up} onPointerCancel={up} aria-label="Hold to talk">
@@ -142,7 +149,7 @@ export function Phone({ code: initialCode }) {
             <span className="lvl" style={{ opacity: handsFree ? Math.min(1, level * 2) : 0 }} />
           </button>
           <button className={`btn ${handsFree ? 'on' : ''}`} onClick={() => setHandsFree(!handsFree)}>
-            {handsFree ? 'Hands-free on' : 'Hands-free'}
+            {handsFree ? 'Listening' : 'Hands-Free'}
           </button>
         </>
       )}

@@ -123,8 +123,8 @@ export function BomList({ plan, board, status = {}, current = null, verification
                 <div className="side-head">
                   {SIDE_NAME[side]} <span className="count">{list.reduce((n, c) => n + c.refs.length, 0)}</span>
                   {si === 0 && onSwapSides && (
-                    <button className="btn sm" onClick={onSwapSides} title="Do the other side first">
-                      <Icon name="swap" /> {SIDE_NAME[sides[1]]} first
+                    <button className="btn sm tinted" onClick={onSwapSides} title="Do the other side first">
+                      <Icon name="swap" /> {SIDE_NAME[sides[1]]} First
                     </button>
                   )}
                 </div>

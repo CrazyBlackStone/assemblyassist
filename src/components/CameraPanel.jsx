@@ -71,7 +71,7 @@ export function CameraPanel({ project }) {
 
   return (
     <section className="panel p3 glass" aria-label="Camera">
-      <div className={`video-wrap ${overlay ? 'blur' : ''}`} ref={boxRef}>
+      <div className={`video-wrap ${stream ? 'live' : ''} ${overlay ? 'blur' : ''}`} ref={boxRef}>
         <video
           ref={videoRef}
           muted
@@ -124,8 +124,9 @@ function PairInline({ pair }) {
   return (
     <div className="empty-cam">
       {qr ? <img className="qr" src={qr} alt="Scan with the phone to pair" /> : <div className="spinner" />}
+      <div className="t-title3">Connect Your Phone</div>
       <div className="code">{pair.code ?? '······'}</div>
-      <div className="muted">Scan with the phone</div>
+      <div className="muted">Scan the code with the phone’s camera, then prop it 15–25 cm above the board.</div>
       {pair.error && <div className="err-text">{pair.error}</div>}
     </div>
   )
@@ -135,7 +136,7 @@ function LocalCamPrompt({ error }) {
   return (
     <div className="empty-cam">
       <button className="btn primary xl" onClick={() => openLocalCamera().catch(() => {})}>
-        Start camera
+        Start Camera
       </button>
       {error && <div className="err-text">{error}</div>}
     </div>
@@ -176,7 +177,7 @@ function CheckCard({ check, project }) {
             <div className="spinner" />
             <span className="muted">{check.status === 'capturing' ? 'Taking photo…' : 'Checking…'}</span>
             <span className="spacer" />
-            <button className="btn sm" onClick={closeCheck}>
+            <button className="btn sm plain" onClick={closeCheck}>
               Cancel
             </button>
           </div>
@@ -226,7 +227,7 @@ function CheckCard({ check, project }) {
                 <Icon name="x" />
               </button>
               <button className="btn ok" onClick={() => confirmCheck('ok')}>
-                <Icon name="check" /> Good
+                <Icon name="check" /> Looks Good
               </button>
             </div>
           </>
@@ -258,7 +259,7 @@ function ReviewCard({ review }) {
           <div className="card-row" style={{ alignItems: 'flex-start' }}>
             <img src={all[sel.ref]?.dataUrl} alt="" style={{ width: 160, borderRadius: 16 }} />
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8, flex: 1 }}>
-              <b style={{ fontSize: '1.3rem' }}>{sel.ref}</b>
+              <b className="t-title3">{sel.ref}</b>
               <div className="verdicts">
                 <Verdict label="Orientation" state={sel.result.data.orientation} />
                 <Verdict label="Solder" state={sel.result.data.soldering} />

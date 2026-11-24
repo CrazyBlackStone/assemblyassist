@@ -25,6 +25,7 @@ Workspace (projects) → Setup (files, options, phone, order) → Build (rail ·
 ## Decisions
 
 - **No AI settings in the app.** Models and keys are set in code and build environment only.
+- **Look: Apple Liquid Glass.** Panels and controls are translucent glass (blur, saturation, specular rim) floating over a soft colour field, with San Francisco type (Inter where SF isn't available) and Apple's type scale and system colours. Light by default; Dark and Auto in the workspace. `prefers-reduced-transparency` makes the glass nearly opaque. All of it is in `src/styles.css`; the appearance setting is `src/lib/theme.js`.
 - **Front and back.** Each category belongs to one side; the build does one side, then asks you to flip the board. The back goes first only when it has nothing but low SMD parts and the front has something tall. Camera calibration is kept per side.
 - **Files are identified by content.** Tools name layers differently (Allegro `TOP.art`, Altium `.GTL`, KiCad `-F_Cu.gbr`), so headers come first and names second.
 - **3D sizes come from data, not guesses.** Package names are parsed (EIA codes, IPC-7351, KiCad names) and heights come from datasheet tables. Unknown packages use the netlist's real pads.

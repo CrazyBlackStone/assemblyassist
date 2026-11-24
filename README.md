@@ -22,7 +22,7 @@ npm test
 
 ## Screens
 
-- **Workspace**: your projects, each with a board thumbnail and progress. Projects are stored in the browser (IndexedDB).
+- **Workspace**: your projects, each with a board thumbnail and progress. Projects are stored in the browser (IndexedDB). The Light / Dark / Auto switch sets the appearance.
 - **Setup**: drop the fabrication zip (or loose files) from any EDA tool, plus the CPL and an optional BOM; turn the soldering check off for solder paste; choose camera and microphone; pair the phone by QR code; drag the BOM into the order you want (front and back are ordered separately), or ask for a suggested order.
 - **Build**:
   - **Left rail**: the build order as ref des. Tap it to open the full list, where parts and whole categories can be dragged.

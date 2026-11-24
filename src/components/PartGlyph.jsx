@@ -89,7 +89,7 @@ export function PartGlyph({ part, g, rot, viewRotation, side = 'top' }) {
           <feGaussianBlur stdDeviation={r * 0.02} />
         </filter>
       </defs>
-      <circle cx={0} cy={0} r={r * 0.97} fill="none" stroke="rgba(255,255,255,0.08)" strokeWidth={r * 0.01} />
+      <circle cx={0} cy={0} r={r * 0.97} fill="none" stroke="var(--separator)" strokeWidth={r * 0.01} />
       <g transform={`rotate(${turn}) translate(${-e.cx} ${e.cy})`}>
         <PartBody part={part} g={g} highlight scale={r / 4} />
       </g>

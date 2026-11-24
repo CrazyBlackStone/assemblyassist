@@ -27,6 +27,17 @@ const P = {
   phone: 'M8 2h8a2 2 0 012 2v16a2 2 0 01-2 2H8a2 2 0 01-2-2V4a2 2 0 012-2zM11 18h2',
   done: 'M4 12.5l3.5 3.5L14 9M10 16l1 1 9-10',
   board: 'M4 5h16v14H4zM8 9h3v3H8zM14 9h2M14 13h2M8 15h8',
+  chevron: 'M9 5l7 7-7 7',
+  layers: 'M12 3l9 5-9 5-9-5 9-5zM3 13l9 5 9-5',
+  pin: 'M12 21s-6-5.6-6-11a6 6 0 0112 0c0 5.4-6 11-6 11zM12 8a2 2 0 110 4 2 2 0 010-4z',
+  table: 'M4 5h16v14H4zM4 10h16M4 15h16M10 5v14',
+  net: 'M4 6h4M16 18h4M8 6c4 0 4 12 8 12M6 4v4M18 16v4',
+  flame: 'M12 3c3 4 5 6 5 10a5 5 0 01-10 0c0-2 1-3.5 2-4.5.5 2 1.5 3 3 3-1-3 0-6 0-8.5z',
+  camera: 'M4 8h3l2-3h6l2 3h3v11H4zM12 10a3.5 3.5 0 110 7 3.5 3.5 0 010-7z',
+  sliders: 'M4 7h10M18 7h2M4 17h4M12 17h8M16 5v4M10 15v4',
+  sun: 'M12 8a4 4 0 110 8 4 4 0 010-8zM12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4',
+  moon: 'M20 14.5A8 8 0 019.5 4a8 8 0 1010.5 10.5z',
+  auto: 'M12 3a9 9 0 110 18 9 9 0 010-18zM12 3v18',
 }
 
 export function Icon({ name, className = 'ico' }) {
@@ -53,7 +64,7 @@ export function AiBadge({ simulated }) {
 export function MarkWrong({ task, meta, inputSummary, modelSaid, uiAction, options, onMarked }) {
   const [open, setOpen] = useState(false)
   const [done, setDone] = useState(false)
-  if (done) return <span className="faint" style={{ fontSize: '0.8rem' }}>Logged</span>
+  if (done) return <span className="faint t-footnote">Logged</span>
   const save = (choice) => {
     logFailure({ task, model: meta?.model, kind: 'marked-wrong', inputSummary, modelSaid, userSaysRight: choice, uiAction })
     recordFeedback({ task, model: meta?.model, verdict: 'wrong' })
